@@ -4,7 +4,7 @@
 
 This version uses a shared balance that stays at zero across the people who are present. It also checks that trades are safe, supports restricted rotations, adds a quick seating confirmation, and handles absences without creating debt.
 
-The companion file, `family-app-stress-test.md`, explains the 12-week simulation behind these choices. The later v4 tests are documented in `family-app-v4-validation.md`.
+The companion file, `stress-test-v3.md`, explains the 12-week simulation behind these choices. The later v4 tests are documented in `validation-v4.md`.
 
 ## 1. What the app does
 
@@ -243,9 +243,9 @@ Development will use Windows 11. Android tools run on Windows, and neither Windo
 
 ### 6.3 Build stages
 
-Stage 0 should take one weekend. Port `rotation_engine_v4.py` to TypeScript with its pytest tests. Build only daily seating, use a fixed roster, and store nothing on a server. The result should be a phone-friendly "who's today" card with confirmation and correction actions.
+Stage 0 should take one weekend. Port `reference/python/rotation_engine_v4.py` to TypeScript with its pytest tests. Build only daily seating, use a fixed roster, and store nothing on a server. The result should be a phone-friendly "who's today" card with confirmation and correction actions.
 
-The tests are the contract for the TypeScript port. The old `rotation_engine.py` remains only to reproduce the v3 findings.
+The tests are the contract for the TypeScript port. The old `reference/python/rotation_engine_v3.py` remains only to reproduce the v3 findings.
 
 Stage 1 adds weekly chores, weights, history, local storage, and installation as a web app.
 

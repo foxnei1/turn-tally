@@ -2,7 +2,7 @@
 
 *Companion to Concept Brief v3 · 12-week simulation, 4 children, 5 rotations*
 
-> Historical note: this document records the simulation that falsified v3. The subsequent v4.2 executable stress suite, decisions, and open issues are documented in `family-app-v4-validation.md`.
+> Historical note: this document records the simulation that falsified v3. The subsequent v4.2 executable stress suite, decisions, and open issues are documented in `validation-v4.md`.
 
 ---
 

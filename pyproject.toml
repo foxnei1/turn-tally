@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+testpaths = ["reference/python/tests"]
+pythonpath = ["reference/python"]
+xfail_strict = true

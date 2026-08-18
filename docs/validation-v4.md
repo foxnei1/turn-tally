@@ -4,7 +4,7 @@
 
 ## Outcome
 
-The v4 reference implementation is in `rotation_engine_v4.py`, alongside the historical v3 prototype. The pytest suite is the executable contract.
+The v4 reference implementation is in `reference/python/rotation_engine_v4.py`, alongside the historical v3 prototype. The pytest suite is the executable contract.
 
 Current result: **49 passed, 1 expected failure**. Coverage includes 100 deterministic structural seeds spanning 6–24 simulated months, persisted event conflicts, effective-dated configuration, round-robin comparisons, and two-year policy scenarios.
 
