@@ -25,3 +25,9 @@ export interface Rotation {
 
 export type BalanceMap = Readonly<Record<PersonId, number>>
 export type LastTurnMap = Readonly<Partial<Record<PersonId, CalendarDate>>>
+
+export interface HouseholdConfiguration {
+  people: readonly Person[]
+  rotation: Rotation
+  startDate: CalendarDate
+}

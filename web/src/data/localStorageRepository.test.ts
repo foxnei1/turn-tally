@@ -10,6 +10,22 @@ const assignment: AssignmentRecorded = {
   personId: 'elena',
 }
 
+const configuration = {
+  people: [{ id: 'elena', name: 'Elena' }],
+  startDate: '2026-08-17',
+  rotation: {
+    id: 'middle-seat',
+    name: 'Middle seat',
+    type: 'burden' as const,
+    cadence: 'daily' as const,
+    desirability: 1,
+    maxConsecutive: 2,
+    order: 0,
+    restricted: false,
+    roster: ['elena'],
+  },
+}
+
 describe('LocalStorageRotationRepository', () => {
   beforeEach(() => localStorage.clear())
 
@@ -28,5 +44,17 @@ describe('LocalStorageRotationRepository', () => {
     await repository.appendEvent(assignment)
 
     await expect(repository.listEvents()).resolves.toHaveLength(1)
+  })
+
+  it('persists configuration and clears all prototype data', async () => {
+    const repository = new LocalStorageRotationRepository(localStorage)
+    await repository.saveConfiguration(configuration)
+    await repository.appendEvent(assignment)
+
+    await expect(repository.loadConfiguration()).resolves.toEqual(configuration)
+
+    await repository.clear()
+    await expect(repository.loadConfiguration()).resolves.toBeNull()
+    await expect(repository.listEvents()).resolves.toEqual([])
   })
 })
