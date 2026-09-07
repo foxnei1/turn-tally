@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
 import type { RotationRecord } from '../../domain/rotation/engine'
-import type { Person, PersonId } from '../../domain/rotation/types'
+import type { TurnCorrection } from '../../domain/rotation/events'
+import type { Person } from '../../domain/rotation/types'
 import { CorrectionChoices } from './CorrectionChoices'
 
 interface TodaySeatCardProps {
@@ -9,96 +10,70 @@ interface TodaySeatCardProps {
   people: readonly Person[]
   rotationName: string
   dateLabel: string
-  onConfirm: () => Promise<void>
-  onCorrect: (covererId: PersonId | null) => Promise<void>
+  onCorrect: (correction: TurnCorrection) => Promise<void>
+  canEdit?: boolean
 }
 
-export function TodaySeatCard({
-  record,
-  people,
-  rotationName,
-  dateLabel,
-  onConfirm,
-  onCorrect,
-}: TodaySeatCardProps) {
+export function TodaySeatCard({ record, people, rotationName, dateLabel, onCorrect, canEdit = true }: TodaySeatCardProps) {
   const [correcting, setCorrecting] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const person = people.find((person) => person.id === record.servedById)
   const assignee = people.find((person) => person.id === record.assigneeId)!
-  const servedBy = people.find((person) => person.id === record.servedById)
-  const pending = record.outcome === 'assumed'
+  const assumed = record.outcome === 'assumed' || record.outcome === 'absence'
+  const chore = record.rotation?.kind === 'chore'
+  const weekly = record.rotation?.cadence === 'weekly'
 
-  async function confirm() {
+  async function saveCorrection(correction: TurnCorrection) {
     setSaving(true)
+    setError(null)
     try {
-      await onConfirm()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function saveCorrection(covererId: PersonId | null) {
-    setSaving(true)
-    try {
-      await onCorrect(covererId)
+      await onCorrect(correction)
       setCorrecting(false)
+    } catch {
+      setError('Couldn’t save this change. Please try again.')
     } finally {
       setSaving(false)
     }
   }
 
-  let status = 'Turn confirmed.'
-  if (record.outcome === 'trade') {
-    status = `${servedBy?.name ?? 'Another person'} took it instead.`
-  } else if (record.outcome === 'outside-cover') {
-    status = 'An adult covered this turn.'
+  let title = person?.name ?? 'Turn skipped'
+  let status = person ? person.name + '’s turn is recorded.' : 'Nobody gets credit or owes an extra turn.'
+  if (assumed && person) status = canEdit ? 'We’ll count this as ' + person.name + '’s turn unless you change it.' : 'Counted as ' + person.name + '’s turn. An editor can record changes.'
+  if (record.outcome === 'trade') status = person?.name + (chore ? ' handled the chore' : ' took the seat') + (assignee ? ' instead of ' + assignee.name : '') + '.'
+  if (record.assigneeId === null && assumed) { title = 'Needs participants'; status = 'No turn is counted until enough people share this activity.' }
+  if (record.outcome === 'no-trip') title = 'No trip this day'
+  if (record.outcome === 'adult-cover') title = chore ? 'Covered by someone else' : 'An adult took the seat'
+  if (record.outcome === 'excused' && chore) title = 'Not needed this turn'
+  if (record.outcome === 'outside-cover') {
+    title = 'An adult took the seat'
+    status = 'An older rule made the assigned person due sooner. See the turn details.'
   }
 
   return (
     <section aria-labelledby="seat-card-title" className="rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_20px_60px_rgba(41,51,45,0.10)] sm:p-8">
       <p className="text-sm font-medium text-stone-500">{dateLabel}</p>
-      <h2 id="seat-card-title" className="mt-2 text-2xl font-medium text-stone-700">{rotationName}</h2>
-      <p className="mt-6 text-5xl font-semibold tracking-tight text-emerald-800">{assignee.name}</p>
-
-      {!correcting && pending ? (
-        <div className="mt-8 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void confirm()}
-            className="rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white transition hover:bg-emerald-900 disabled:opacity-60"
-          >
-            Confirm
-          </button>
-          <button
-            type="button"
-            onClick={() => setCorrecting(true)}
-            className="rounded-xl border border-stone-300 px-4 py-3 font-semibold text-stone-700 transition hover:bg-stone-50"
-          >
-            Wasn't me
-          </button>
-        </div>
+      <h1 id="seat-card-title" className="mt-2 text-xl font-medium text-stone-700">{chore ? rotationName : 'Today’s ' + rotationName.toLowerCase()}</h1>
+      {weekly ? <p className="mt-2 text-sm text-stone-500">One person is responsible for the whole week.</p> : null}
+      <p className="mt-5 break-words text-4xl font-semibold tracking-tight text-emerald-800 sm:text-5xl">{title}</p>
+      <p role="status" className="mt-4 text-base leading-7 text-stone-600">{status}</p>
+      {record.absentIds.length > 0 ? (
+        <p className="mt-2 text-sm text-stone-600">Away: {people.filter((person) => record.absentIds.includes(person.id)).map((person) => person.name).join(', ')}</p>
       ) : null}
-
-      {!correcting && !pending ? (
-        <div className="mt-8 flex items-center justify-between gap-4 rounded-xl bg-stone-100 px-4 py-3">
-          <p role="status" className="text-sm text-stone-700">{status}</p>
-          <button type="button" onClick={() => setCorrecting(true)} className="shrink-0 text-sm font-semibold text-emerald-800 hover:text-emerald-950">
-            Change
-          </button>
-        </div>
-      ) : null}
-
-      {correcting ? (
-        <fieldset disabled={saving}>
-          <CorrectionChoices
-            assigneeId={record.assigneeId}
-            people={people}
-            includeAssignee={!pending}
-            onChoose={(covererId) => void saveCorrection(covererId)}
-            onCancel={() => setCorrecting(false)}
-          />
+      {canEdit && (!correcting ? (
+        <button type="button" onClick={() => setCorrecting(true)} className="mt-6 w-full rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white hover:bg-emerald-900">
+          {chore ? 'Change who did it' : 'Change who took it'}
+        </button>
+      ) : (
+        <fieldset disabled={saving} aria-busy={saving}>
+          <CorrectionChoices record={record} people={people} onChoose={(correction) => void saveCorrection(correction)} onCancel={() => setCorrecting(false)} />
         </fieldset>
-      ) : null}
+      ))}
+      {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+      <details className="mt-5 border-t border-stone-200 pt-4">
+        <summary className="cursor-pointer text-sm font-semibold text-emerald-800">{person && assumed ? 'Why ' + person.name + '?' : 'Turn details'}</summary>
+        <p className="mt-3 text-sm leading-6 text-stone-600">{record.explanation}</p>
+      </details>
     </section>
   )
 }

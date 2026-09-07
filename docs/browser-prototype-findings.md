@@ -2,6 +2,8 @@
 
 *Daily seating vertical slice · August 2026*
 
+This documents the original prototype. The [September iteration](iteration-september-2026.md) replaces confirmation-first UI, numeric balance explanations, and the adult-cover penalty for new records, and adds day-specific absences and no-trip reporting.
+
 ## Outcome
 
 The static seating card is now a working local prototype. A family can enter its members, receive a calculated middle-seat assignment, confirm it or report who covered, review recent days, and inspect the balance behind the next assignment. Refreshing or closing the browser does not lose the setup or history.

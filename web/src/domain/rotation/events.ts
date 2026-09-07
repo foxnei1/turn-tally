@@ -7,16 +7,19 @@ interface EventBase {
 export interface AssignmentRecorded extends EventBase {
   type: 'assignment-recorded'
   slotId: SlotId
-  personId: PersonId
+  personId: PersonId | null
 }
 
 export interface OutcomeRecorded extends EventBase {
   type: 'outcome-recorded'
   slotId: SlotId
-  outcome: 'as-scheduled' | 'trade' | 'outside-cover' | 'excused'
+  outcome: 'as-scheduled' | 'trade' | 'outside-cover' | 'excused' | 'no-trip' | 'adult-cover' | 'absence'
   covererId?: PersonId
+  absentIds?: readonly PersonId[]
   supersedes: readonly string[]
 }
+
+export type TurnCorrection = Pick<OutcomeRecorded, 'outcome' | 'covererId' | 'absentIds'>
 
 export interface RosterChanged extends EventBase {
   type: 'roster-changed'

@@ -1,4 +1,4 @@
-import { eachDayOfInterval, format, parseISO } from 'date-fns'
+import { scheduledTurns } from './schedule'
 
 import type { AssignmentRecorded, OutcomeRecorded, RotationEvent } from './events'
 import type {
@@ -55,12 +55,15 @@ export type SlotOutcome = 'assumed' | OutcomeRecorded['outcome']
 export interface RotationRecord {
   slotId: SlotId
   date: CalendarDate
-  assigneeId: PersonId
+  assigneeId: PersonId | null
   servedById: PersonId | null
   outcome: SlotOutcome
   assignmentSource: 'derived' | 'recorded'
   deltas: BalanceMap
   balances: BalanceMap
+  absentIds: readonly PersonId[]
+  explanation: string
+  rotation?: Rotation
 }
 
 interface ReplayInput {
@@ -142,11 +145,11 @@ export function getActiveOutcomeIds(
 }
 
 export function replayRotation({ configuration, events, endDate }: ReplayInput): RotationReplay {
-  const { people, rotation, startDate } = configuration
-  const roster = rotation.roster
+  const { people, rotation: initialRotation, startDate } = configuration
+  const roster = initialRotation.roster
   const knownPeople = new Set(people.map((person) => person.id))
 
-  if (roster.length === 0 || roster.some((personId) => !knownPeople.has(personId))) {
+  if (roster.some((personId) => !knownPeople.has(personId))) {
     throw new Error('The rotation roster must contain known family members.')
   }
   if (endDate < startDate) {
@@ -157,7 +160,7 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
     people.map((person) => [person.id, 0]),
   )
   const lastTurn: Partial<Record<PersonId, CalendarDate>> = {}
-  const consecutive: Record<PersonId, number> = Object.fromEntries(roster.map((personId) => [personId, 0]))
+  const consecutive: Record<PersonId, number> = Object.fromEntries(people.map((person) => [person.id, 0]))
   const assignments = new Map<SlotId, AssignmentRecorded>()
   for (const event of events) {
     if (event.type !== 'assignment-recorded') {
@@ -172,23 +175,29 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
   const outcomes = activeOutcomes(events)
   const records: RotationRecord[] = []
 
-  for (const day of eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) })) {
-    const date = format(day, 'yyyy-MM-dd')
+  for (const { date, rotation } of scheduledTurns(initialRotation, startDate, endDate)) {
+    const roster = rotation.roster
+    if (new Set(roster).size !== roster.length || roster.some((id) => !knownPeople.has(id))) {
+      throw new Error('The rotation roster must contain unique, known family members.')
+    }
     const slotId = `${rotation.id}:${date}`
-    const eligible = roster.filter((personId) => consecutive[personId] < rotation.maxConsecutive)
+    const recordedOutcome = outcomes.get(slotId)
+    const absentIds = recordedOutcome?.absentIds ?? []
+    if (absentIds.some((id) => !roster.includes(id)) || new Set(absentIds).size !== absentIds.length) {
+      throw new Error('Absent people must be unique members of the rotation.')
+    }
+    const present = roster.filter((id) => !absentIds.includes(id))
+    const eligible = present.filter((personId) => consecutive[personId] < rotation.maxConsecutive)
+    const candidates = eligible.length > 0 ? eligible : present
+    const suggestedId = selectAssignee({ rotation, eligible: candidates, balances, lastTurn })
     const recordedAssignment = assignments.get(slotId)
-    const assigneeId = recordedAssignment?.personId ?? selectAssignee({
-      rotation,
-      eligible: eligible.length > 0 ? eligible : roster,
-      balances,
-      lastTurn,
-    })
+    const minimum = rotation.kind === 'chore' ? 1 : 2
+    const assigneeId = recordedAssignment ? recordedAssignment.personId : roster.length >= minimum ? suggestedId ?? roster[0] : null
 
-    if (!assigneeId || !roster.includes(assigneeId)) {
+    if (assigneeId !== null && !roster.includes(assigneeId)) {
       throw new Error(`Recorded assignment is not in the rotation roster: ${slotId}`)
     }
 
-    const recordedOutcome = outcomes.get(slotId)
     const outcome: SlotOutcome = recordedOutcome?.outcome ?? 'assumed'
     let transaction = rotation.type === 'burden' ? -rotation.desirability : rotation.desirability
     let takerId: PersonId | null = assigneeId
@@ -206,27 +215,70 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
     } else if (outcome === 'outside-cover') {
       transaction = -transaction
       servedById = null
-    } else if (outcome === 'excused') {
+    } else if (outcome === 'excused' || outcome === 'no-trip' || outcome === 'adult-cover') {
       takerId = null
       servedById = null
+    } else if (outcome === 'absence') {
+      takerId = present.length < minimum ? null : recordedOutcome?.covererId ??
+        (assigneeId !== null && present.includes(assigneeId) ? assigneeId : suggestedId)
+      servedById = takerId
+    }
+
+    if (takerId !== null && !present.includes(takerId)) {
+      throw new Error('Someone who is away cannot take this turn.')
+    }
+
+    const name = (id: PersonId) => people.find((person) => person.id === id)!.name
+    let explanation: string
+    if (outcome === 'no-trip') {
+      explanation = 'No trip was taken. Nobody gets credit or owes an extra turn.'
+    } else if (outcome === 'adult-cover' || outcome === 'excused') {
+      explanation = 'This turn is skipped. Nobody gets credit or owes an extra turn.'
+    } else if (outcome === 'outside-cover') {
+      explanation = 'This older record used the previous adult-cover rule: the assigned person became due sooner. Change it to adult coverage to remove that penalty.'
+    } else if (outcome === 'trade') {
+      explanation = `${name(takerId!)} ${rotation.kind === 'chore' ? 'handled the chore' : 'took the seat'}${assigneeId ? ' instead of ' + name(assigneeId) : ''} and gets credit for it.`
+      if (assigneeId && !absentIds.includes(assigneeId)) explanation += ` ${name(assigneeId)} is still due a turn.`
+    } else if (takerId === null) {
+      explanation = rotation.kind === 'chore' ? 'Nobody is available for this chore, so no turn is counted.' : 'Fewer than two people are here to share the seat, so no turn is counted.'
+    } else if (takerId !== suggestedId) {
+      explanation = `${name(takerId)} was already assigned this turn. Changes to earlier days affect future turns without changing this assignment.`
+    } else {
+      const tied = candidates.filter((id) => Math.abs((balances[id] ?? 0) - (balances[takerId!] ?? 0)) < 1e-10)
+      const oldest = tied.filter((id) => (lastTurn[id] ?? '') === (lastTurn[takerId!] ?? ''))
+      if (candidates.length === 1) {
+        explanation = `${name(takerId)} is the only person eligible for this turn.`
+      } else if (tied.length === 1) {
+        explanation = `${name(takerId)} is due because they have had a smaller share of the turns among the people eligible today.`
+      } else if (oldest.length === 1 && tied.length > 1) {
+        explanation = `${name(takerId)} has waited longest among the people equally due a turn.`
+      } else {
+        explanation = `The people next in line are equally due. ${name(takerId)} comes first in your family’s starting order.`
+      }
+      if (eligible.length > 0 && eligible.length < present.length) {
+        explanation = `People who have taken ${rotation.maxConsecutive} turns in a row get a break. ${explanation}`
+      }
+    }
+    if (absentIds.length > 0) {
+      explanation = `${absentIds.map(name).join(', ')}: away for this ${rotation.cadence === 'weekly' ? 'week' : 'day'}, with no credit or extra turns owed. ${explanation}`
     }
 
     const deltas: Record<PersonId, number> = {}
     if (takerId !== null) {
-      const share = transaction / roster.length
-      for (const personId of roster) {
+      const share = transaction / present.length
+      for (const personId of present) {
         deltas[personId] = personId === takerId ? 0 : -share
       }
       deltas[takerId] = -Object.values(deltas).reduce((total, delta) => total + delta, 0)
-      for (const personId of roster) {
+      for (const personId of present) {
         balances[personId] += deltas[personId]
       }
     }
 
-    for (const personId of roster) {
-      consecutive[personId] = personId === takerId ? consecutive[personId] + 1 : 0
-    }
     if (takerId !== null) {
+      for (const personId of present) {
+        consecutive[personId] = personId === takerId ? consecutive[personId] + 1 : 0
+      }
       lastTurn[takerId] = date
     }
 
@@ -239,6 +291,9 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
       assignmentSource: recordedAssignment ? 'recorded' : 'derived',
       deltas: { ...deltas },
       balances: { ...balances },
+      absentIds: [...absentIds],
+      explanation,
+      rotation,
     })
   }
 

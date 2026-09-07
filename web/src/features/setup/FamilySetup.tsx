@@ -41,8 +41,9 @@ export function FamilySetup({ onSubmit }: FamilySetupProps) {
         Who shares the middle seat?
       </h1>
       <p className="mt-3 leading-7 text-stone-600">
-        Add first names in the order your family normally uses. Everything stays in this browser.
+        TurnTally remembers whose turn it is and adjusts when someone else takes a turn.
       </p>
+      <p className="mt-2 text-sm leading-6 text-stone-600">Add names in the order you want to start. The first person gets today’s turn. Everything stays in this browser.</p>
 
       <form onSubmit={submit} className="mt-8 rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_20px_60px_rgba(41,51,45,0.10)] sm:p-8">
         <div className="space-y-4">

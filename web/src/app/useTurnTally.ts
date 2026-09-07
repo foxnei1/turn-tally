@@ -4,14 +4,15 @@ import type { TurnTallyRepository } from '../data/RotationRepository'
 import {
   getActiveOutcomeIds,
   missingAssignmentEvents,
-  replayRotation,
-  type RotationRecord,
 } from '../domain/rotation/engine'
-import type { OutcomeRecorded, RotationEvent } from '../domain/rotation/events'
+import { configureActivity, replayActivities, type ActivityView } from '../domain/rotation/activities'
+import { canAdminister, canEdit, initializeRoles, requirePermission, saveFamilyMember } from '../domain/family/members'
+import type { OutcomeRecorded, RotationEvent, TurnCorrection } from '../domain/rotation/events'
 import type {
-  BalanceMap,
+  ActivityDraft,
   CalendarDate,
   HouseholdConfiguration,
+  MemberDraft,
   PersonId,
 } from '../domain/rotation/types'
 
@@ -20,8 +21,7 @@ type AppPhase = 'loading' | 'setup' | 'ready' | 'error'
 interface TurnTallyState {
   phase: AppPhase
   configuration: HouseholdConfiguration | null
-  records: readonly RotationRecord[]
-  balances: BalanceMap
+  activities: readonly ActivityView[]
   events: readonly RotationEvent[]
   error: string | null
 }
@@ -29,8 +29,7 @@ interface TurnTallyState {
 const EMPTY_STATE: TurnTallyState = {
   phase: 'loading',
   configuration: null,
-  records: [],
-  balances: {},
+  activities: [],
   events: [],
   error: null,
 }
@@ -42,6 +41,14 @@ function newEventId(prefix: string): string {
 
 export function useTurnTally(repository: TurnTallyRepository, today: CalendarDate) {
   const [state, setState] = useState<TurnTallyState>(EMPTY_STATE)
+  const [actorId, setActorId] = useState<PersonId | null>(null)
+
+  async function authorizedConfiguration(permission: 'edit' | 'administer') {
+    const configuration = await repository.loadConfiguration()
+    if (!configuration) throw new Error('Set up a family first.')
+    requirePermission(configuration, actorId, permission)
+    return configuration
+  }
 
   const load = useCallback(async () => {
     try {
@@ -52,20 +59,19 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
       }
 
       let events = await repository.listEvents()
-      const initialReplay = replayRotation({ configuration, events, endDate: today })
-      const missingAssignments = missingAssignmentEvents(initialReplay.records, events)
+      const initialReplay = replayActivities(configuration, events, today)
+      const missingAssignments = missingAssignmentEvents(initialReplay.flatMap((view) => view.records), events)
       for (const assignment of missingAssignments) {
         await repository.appendEvent(assignment)
       }
       if (missingAssignments.length > 0) {
         events = await repository.listEvents()
       }
-      const replay = replayRotation({ configuration, events, endDate: today })
+      const activities = replayActivities(configuration, events, today)
       setState({
         phase: 'ready',
         configuration,
-        records: replay.records,
-        balances: replay.balances,
+        activities,
         events,
         error: null,
       })
@@ -84,7 +90,10 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
 
   const createHousehold = useCallback(
     async (names: readonly string[]) => {
-      const people = names.map((name, index) => ({ id: `member-${index + 1}`, name: name.trim() }))
+      if (await repository.loadConfiguration()) throw new Error('A family already exists. Only an administrator can reset it.')
+      const cleaned = names.map((name) => name.trim()).filter(Boolean)
+      if (cleaned.length < 2 || new Set(cleaned.map((name) => name.toLocaleLowerCase())).size !== cleaned.length) throw new Error('Add at least two distinct names.')
+      const people = cleaned.map((name, index) => ({ id: `member-${index + 1}`, name }))
       const configuration: HouseholdConfiguration = {
         people,
         startDate: today,
@@ -100,37 +109,93 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
           roster: people.map((person) => person.id),
         },
       }
-      await repository.clear()
       await repository.saveConfiguration(configuration)
       await load()
     },
     [load, repository, today],
   )
 
-  const recordOutcome = useCallback(
+  const recordOutcome = (
     async (
       slotId: string,
-      outcome: OutcomeRecorded['outcome'],
-      covererId?: PersonId,
+      correction: TurnCorrection,
     ) => {
+      const configuration = await authorizedConfiguration('edit')
+      const events = await repository.listEvents()
       const event: OutcomeRecorded = {
         type: 'outcome-recorded',
         eventId: newEventId('outcome'),
         slotId,
-        outcome,
-        ...(covererId ? { covererId } : {}),
-        supersedes: getActiveOutcomeIds(state.events, slotId),
+        ...correction,
+        supersedes: getActiveOutcomeIds(events, slotId),
+      }
+      // Validate before saving. Pin an absence replacement so later corrections
+      // cannot silently change the person the family was shown.
+      const preview = replayActivities(configuration, [...events, event], today)
+      const record = preview.flatMap((view) => view.records).find((record) => record.slotId === slotId)
+      if (!record) throw new Error('This turn could not be found.')
+      if (correction.outcome === 'absence') {
+        const replacement = record.servedById
+        if (replacement) event.covererId = replacement
       }
       await repository.appendEvent(event)
       await load()
-    },
-    [load, repository, state.events],
+    }
   )
 
-  const reset = useCallback(async () => {
-    await repository.clear()
-    setState({ ...EMPTY_STATE, phase: 'setup' })
-  }, [repository])
+  const saveActivity = async (draft: ActivityDraft, activityId?: string) => {
+    const stored = await authorizedConfiguration('edit')
+    const events = await repository.listEvents()
+    const views = replayActivities(stored, events, today)
+    const existing = activityId ? views.find((view) => view.activity.id === activityId) : undefined
+    if (activityId && !existing) throw new Error('This activity could not be found.')
+    const id = activityId ?? newEventId('activity')
+    const configuration = configureActivity(stored, draft, today, id, existing)
+    replayActivities(configuration, events, today)
+    await repository.saveConfiguration(configuration)
+    await load()
+    return id
+  }
 
-  return { ...state, createHousehold, recordOutcome, reset, reload: load }
+  async function setupAdministrator(choice: { personId: PersonId } | { name: string }) {
+    const stored = await repository.loadConfiguration()
+    if (!stored) throw new Error('Set up a family first.')
+    const result = initializeRoles(stored, choice, newEventId('member'))
+    await repository.saveConfiguration(result.configuration)
+    setActorId(result.administratorId)
+    await load()
+  }
+
+  async function selectProfile(personId: PersonId) {
+    const stored = await repository.loadConfiguration()
+    if (!stored?.rolesInitialized || !stored.people.some((person) => person.id === personId && person.active !== false)) {
+      throw new Error('Choose an active profile.')
+    }
+    setActorId(personId)
+    await load()
+  }
+
+  async function saveMember(draft: MemberDraft, personId?: PersonId) {
+    const stored = await authorizedConfiguration('administer')
+    const events = await repository.listEvents()
+    const id = personId ?? newEventId('member')
+    const configuration = saveFamilyMember(stored, events, today, actorId, draft, id, !!personId)
+    replayActivities(configuration, events, today)
+    await repository.saveConfiguration(configuration)
+    await load()
+  }
+
+  const reset = async () => {
+    await authorizedConfiguration('administer')
+    await repository.clear()
+    setActorId(null)
+    setState({ ...EMPTY_STATE, phase: 'setup' })
+  }
+
+  const actor = state.configuration?.people.find((person) => person.id === actorId && person.active !== false)
+  return {
+    ...state, actor, createHousehold, recordOutcome, saveActivity, saveMember, setupAdministrator, selectProfile, reset, reload: load,
+    canEdit: state.configuration ? canEdit(state.configuration, actorId) : false,
+    canAdminister: state.configuration ? canAdminister(state.configuration, actorId) : false,
+  }
 }
