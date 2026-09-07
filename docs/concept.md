@@ -33,7 +33,7 @@ Names can be edited immediately. Schedule and participant changes take effect wh
 - **A sibling takes the seat:** that sibling gets the credit. The original person remains due, unless they were away.
 - **No trip:** skip the day. Nobody gets credit or owes extra turns.
 - **An adult takes the seat:** skip the family turn, with no credit or penalty.
-- **Someone is away:** leave them out of this activity for the entire turn: one day or one week. Their existing balance stays unchanged. Choose from the people present. Seating needs two people present; a chore needs one. Everyone returns at the next turn unless marked away again.
+- **Someone is away:** leave them out of this activity for the entire turn: one day or one week. Their existing balance stays unchanged. Choose from the people present. Seating needs two people present; a chore needs one. Planned absence ranges apply automatically to subsequent turns.
 - **A tie:** choose the person who has waited longest, then use the family's starting order.
 - **Repeated turns:** normally give someone a break after two turns in a row. If everyone present hits that limit, choose from those present.
 
@@ -65,9 +65,15 @@ Family management supports adding, renaming, role changes, deactivation, and rea
 
 On upgrade, choose an administrator explicitly or add a parent without joining them to activities. Other existing members initially become viewers. Administrators can then assign roles in Family. Editors can change activities and outcomes, but cannot manage members, roles, or household resets. Viewers can read assignments, explanations, and history.
 
-Profile switching is currently an unauthenticated local prototype control. Application actions check the selected profile's stored role, but anyone using the browser can switch profiles. Secure sign-in and server-enforced permissions arrive with hosting and sync before restricted access is distributed to other devices.
+In local prototype mode, profile switching is unauthenticated. Application actions check the selected profile's stored role, but anyone using the browser can switch profiles. The hosted pilot uses provisioned Supabase sign-ins linked to family members, with server-enforced household and role checks. Parent-managed viewer device enrollment remains to be implemented.
 
-Archiving activities, absence date ranges, export/import, and device sync remain future work. Rewards, allowance, groceries, meal planning, reminders, carpooling, and packing lists are deferred. They are not part of the first-version promise.
+Editors and administrators can archive activities, restore them, and download a backup. Archived activities stay out of the main list while retaining history. The original current turn is kept, and no subsequent turns count during the archive period. Restoring resumes the current original turn if it is still underway, or starts a new turn on the restore date after a gap.
+
+Backups contain family members, roles, activities, archives, and history in a versioned JSON file. Replacing an existing household requires its current administrator and a validated preview with explicit confirmation. An empty browser can restore a backup during setup. Imports replace rather than merge data and require choosing a local profile again. Backups are plain files, not encrypted or automatically synchronized.
+
+Absence ranges let editors and administrators select a person, activities, and inclusive dates starting today or later. Weekly attendance is decided on the first day of each turn; midweek departures and returns do not split it. New ranges can update today's automatically counted turns but keep explicit reports and earlier history. Overlaps count a person away once. Upcoming plans can be canceled; ongoing plans can end after today while preserving turns already started. Viewers can read plans, and backups include them.
+
+The hosted pilot stores shared family data in Supabase. Other sessions load changes with **Refresh**, and revision checks reject conflicting saves. Automatic sync notifications, offline viewing, and the remaining account/device workflows are still planned, followed by web beta and app-store releases. A history calendar is planned as feature 7. Rewards, allowance, groceries, meal planning, reminders, carpooling, and packing lists are deferred. They are not part of the first-version promise.
 
 ## Existing data and reference code
 

@@ -15,6 +15,12 @@ export function nextTurnDate(date: CalendarDate, rotation: Rotation): CalendarDa
 export function* scheduledTurns(rotation: Rotation, startDate: CalendarDate, endDate: CalendarDate) {
   let date = startDate
   while (date <= endDate) {
+    const pause = rotation.pauses?.find((item) => item.from <= date && (!item.until || date < item.until))
+    if (pause) {
+      if (!pause.until) break
+      date = pause.until
+      continue
+    }
     const current = rotationAt(rotation, date)
     yield { date, rotation: current }
     date = nextTurnDate(date, current)

@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { TurnTallyRepository } from '../data/RotationRepository'
 import {
   getActiveOutcomeIds,
   missingAssignmentEvents,
 } from '../domain/rotation/engine'
-import { configureActivity, replayActivities, type ActivityView } from '../domain/rotation/activities'
+import { changeActivityArchive, configureActivity, replayActivities, type ActivityView } from '../domain/rotation/activities'
+import { backupCounts, createBackup, parseBackup, type BackupPreview } from '../domain/backups/backup'
 import { canAdminister, canEdit, initializeRoles, requirePermission, saveFamilyMember } from '../domain/family/members'
+import { absenceSnapshot, addAbsence, endAbsence } from '../domain/rotation/absences'
 import type { OutcomeRecorded, RotationEvent, TurnCorrection } from '../domain/rotation/events'
 import type {
   ActivityDraft,
+  AbsenceDraft,
   CalendarDate,
   HouseholdConfiguration,
   MemberDraft,
@@ -42,16 +45,22 @@ function newEventId(prefix: string): string {
 export function useTurnTally(repository: TurnTallyRepository, today: CalendarDate) {
   const [state, setState] = useState<TurnTallyState>(EMPTY_STATE)
   const [actorId, setActorId] = useState<PersonId | null>(null)
+  const loading = useRef<Promise<void> | null>(null)
 
   async function authorizedConfiguration(permission: 'edit' | 'administer') {
+    if (repository.readOnly) throw new Error('This account can view only.')
     const configuration = await repository.loadConfiguration()
     if (!configuration) throw new Error('Set up a family first.')
     requirePermission(configuration, actorId, permission)
     return configuration
   }
 
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
+    if (loading.current) return loading.current
+    const pending = (async () => {
     try {
+      await repository.refresh?.()
+      if (repository.hosted) setActorId(repository.identity?.personId ?? null)
       const configuration = await repository.loadConfiguration()
       if (!configuration) {
         setState({ ...EMPTY_STATE, phase: 'setup' })
@@ -61,8 +70,12 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
       let events = await repository.listEvents()
       const initialReplay = replayActivities(configuration, events, today)
       const missingAssignments = missingAssignmentEvents(initialReplay.flatMap((view) => view.records), events)
-      for (const assignment of missingAssignments) {
-        await repository.appendEvent(assignment)
+      if (repository.hosted) {
+        if (missingAssignments.length && !repository.readOnly) {
+          await repository.replaceSnapshot({ configuration, events: [...events, ...missingAssignments] }, JSON.stringify({ configuration, events }))
+        }
+      } else {
+        for (const assignment of missingAssignments) await repository.appendEvent(assignment)
       }
       if (missingAssignments.length > 0) {
         events = await repository.listEvents()
@@ -82,6 +95,10 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
         error: error instanceof Error ? error.message : 'TurnTally could not load.',
       }))
     }
+    })()
+    loading.current = pending
+    void pending.finally(() => { if (loading.current === pending) loading.current = null })
+    return pending
   }, [repository, today])
 
   useEffect(() => {
@@ -167,6 +184,7 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
   }
 
   async function selectProfile(personId: PersonId) {
+    if (repository.hosted) throw new Error('Sign out to use a different account.')
     const stored = await repository.loadConfiguration()
     if (!stored?.rolesInitialized || !stored.people.some((person) => person.id === personId && person.active !== false)) {
       throw new Error('Choose an active profile.')
@@ -185,6 +203,61 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
     await load()
   }
 
+  async function setActivityArchived(activityId: string, archived: boolean) {
+    const stored = await authorizedConfiguration('edit')
+    const events = await repository.listEvents()
+    const configuration = changeActivityArchive(stored, events, today, activityId, archived)
+    replayActivities(configuration, events, today)
+    await repository.saveConfiguration(configuration)
+    await load()
+  }
+
+  async function exportBackup(): Promise<string> {
+    if (repository.readOnly) throw new Error('This account can view only.')
+    const snapshot = await repository.readSnapshot()
+    if (!snapshot.configuration) throw new Error('There is no family to back up yet.')
+    requirePermission(snapshot.configuration, actorId, 'edit')
+    return createBackup(snapshot, today)
+  }
+
+  async function changeAbsence(draftOrId: AbsenceDraft | string) {
+    if (repository.readOnly) throw new Error('This account can view only.')
+    const snapshot = await repository.readSnapshot()
+    if (!snapshot.configuration) throw new Error('Set up a family first.')
+    requirePermission(snapshot.configuration, actorId, 'edit')
+    // Pin all elapsed turns using the old plan before changing future attendance.
+    const previous = replayActivities(snapshot.configuration, snapshot.events, today)
+    const events = [...snapshot.events, ...missingAssignmentEvents(previous.flatMap((view) => view.records), snapshot.events)]
+    const configuration = typeof draftOrId === 'string'
+      ? endAbsence(snapshot.configuration, draftOrId, today)
+      : addAbsence(snapshot.configuration, draftOrId, today, newEventId('absence'))
+    const next = absenceSnapshot(configuration, events, today, () => newEventId('outcome'))
+    await repository.replaceSnapshot(next, JSON.stringify(snapshot))
+    await load()
+  }
+
+  async function previewBackup(text: string): Promise<BackupPreview> {
+    if (repository.readOnly) throw new Error('This account can view only.')
+    const snapshot = await repository.readSnapshot()
+    if (snapshot.configuration) requirePermission(snapshot.configuration, actorId, 'administer')
+    return { backup: parseBackup(text, today), expectedState: JSON.stringify(snapshot), current: backupCounts(snapshot.configuration, snapshot.events) }
+  }
+
+  async function importBackup(text: string, expectedState: string) {
+    if (repository.readOnly) throw new Error('This account can view only.')
+    const snapshot = await repository.readSnapshot()
+    // An empty browser may bootstrap from a backup. Existing families always
+    // require their current administrator, never a role claimed by the file.
+    if (snapshot.configuration) requirePermission(snapshot.configuration, actorId, 'administer')
+    const backup = parseBackup(text, today)
+    const views = replayActivities(backup.configuration, backup.events, today)
+    const assignments = missingAssignmentEvents(views.flatMap((view) => view.records), backup.events)
+    const replace = repository.restoreSnapshot?.bind(repository) ?? repository.replaceSnapshot.bind(repository)
+    await replace({ configuration: backup.configuration, events: [...backup.events, ...assignments] }, expectedState)
+    setActorId(null)
+    await load()
+  }
+
   const reset = async () => {
     await authorizedConfiguration('administer')
     await repository.clear()
@@ -192,10 +265,12 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
     setState({ ...EMPTY_STATE, phase: 'setup' })
   }
 
-  const actor = state.configuration?.people.find((person) => person.id === actorId && person.active !== false)
+  const storedActor = state.configuration?.people.find((person) => person.id === actorId && person.active !== false)
+  const actor = storedActor && repository.hosted ? { ...storedActor, role: repository.identity?.role ?? 'viewer' as const } : storedActor
   return {
     ...state, actor, createHousehold, recordOutcome, saveActivity, saveMember, setupAdministrator, selectProfile, reset, reload: load,
-    canEdit: state.configuration ? canEdit(state.configuration, actorId) : false,
-    canAdminister: state.configuration ? canAdminister(state.configuration, actorId) : false,
+    setActivityArchived, exportBackup, previewBackup, importBackup, changeAbsence,
+    canEdit: !repository.readOnly && state.configuration ? canEdit(state.configuration, actorId) : false,
+    canAdminister: !repository.readOnly && state.configuration ? canAdminister(state.configuration, actorId) : false,
   }
 }

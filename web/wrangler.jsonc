@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "turntally-pilot",
+  "account_id": "752c301d7fbd5e2c737dabd856d618dc",
+  "compatibility_date": "2026-09-07",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

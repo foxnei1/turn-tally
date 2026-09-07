@@ -11,15 +11,20 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:cloudflare": "npm run build && wrangler dev --local",
+    "deploy:check": "npm run build && wrangler deploy --dry-run",
+    "deploy": "node scripts/check-hosting.mjs && npm run check && wrangler deploy"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.116.0",
     "date-fns": "^4.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
@@ -33,6 +38,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "4.129.1"
   }
 }

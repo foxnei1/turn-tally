@@ -1,6 +1,6 @@
 # TurnTally roadmap
 
-*Agreed feature sequence · September 7, 2026. Role defaults and initial release audience are settled. Infrastructure choices below remain proposals.*
+*Agreed feature sequence · September 7, 2026. Role defaults, initial release audience, Cloudflare hosting, and the Supabase backend are settled. Viewer enrollment and offline behavior remain to be completed.*
 
 ## Agreed direction
 
@@ -9,6 +9,8 @@
 - Adult children default to editor access, with family and access administration reserved for administrators.
 - Release to the owner's family first. A limited invite list may follow if explicitly chosen; public self-service signup is out of scope.
 - Add hosting and shared data across devices.
+- Use Cloudflare's free tier for pilot hosting.
+- Use Supabase Auth and PostgreSQL for the backend.
 - Target iOS and Android app stores, replacing the historical web-only distribution constraint.
 
 ## Agreed permission defaults
@@ -28,25 +30,34 @@ Recommended account approach: separate adult sign-ins and parent-provisioned, re
 ## Feature sequence
 
 1. **Family management and role model — implemented locally.** Add and rename members, deactivate/reactivate members without losing history, assign parent/editor/viewer roles, and select activity participation separately. Membership changes apply prospectively. Permission checks cover application actions as well as the interface. Local checks remain a prototype guardrail until server authentication and authorization arrive in item 4.
-2. **Activity lifecycle and backups.** Archive and restore activities, preserve history, export a versioned backup, and preview/validate an import before replacing data. Keep imports and household deletion administrator-only under the agreed permissions.
-3. **Absence ranges.** Mark a person away across selected activities for a date range. Define partial-week behavior before implementation; the current weekly correction covers the entire turn.
+2. **Activity lifecycle and backups — implemented locally.** Archive and restore activities while preserving history, download a versioned JSON backup, and validate/preview a restore before replacing data. Editors and administrators can archive, restore activities, and export. Replacing an existing family requires its current administrator; an empty browser can recover from a backup during setup.
+3. **Absence ranges — implemented locally.** Mark a person away across selected activities with inclusive first/last dates. Weekly chores check attendance on the turn's start date; midweek departures or returns do not split a turn. Editors and administrators can plan absences, cancel future plans, and end ongoing absences after today. Viewers can read them. Recorded history and explicit outcomes are preserved.
 4. **Hosted accounts and device sync.** Select hosting, add adult sign-in and child viewer enrollment, enforce household isolation and roles on the server, migrate local data explicitly, synchronize changes, show connection state, and resolve conflicting edits without silently discarding either report. Admission starts with the owner's family only, with no public signup. Design for a later optional, limited invite list. Test write rejection for viewers and isolation between families before expanding access. Recommended first release: cached viewing offline, editing while connected; offline edit queues can follow.
 5. **Installable web beta.** Add home-screen installation, test phones and shared devices, test recovery and revocation, and run the parent-and-child usability walkthrough against real family use.
 6. **iOS and Android releases.** Package the web app, test native authentication/storage/navigation, prepare store listings and screenshots, privacy disclosures, account/data deletion, child-audience declarations, beta distribution, signing, and release builds. Verify store rules again at submission.
+7. **History calendar.** Browse past turns in a calendar, filter by activity, and open a day to see assignments, who actually took the turn, absences, and corrections. Make weekly chore spans clear without counting each day as a separate turn. All roles can view history; editors and administrators retain the existing correction permissions. Choose the initial calendar layout before implementation.
 
-## Hosting and distribution proposal
+## Hosting decision and distribution proposal
 
 Hosting delivers the app; a shared backend stores and authorizes family data. Hosting the existing local-storage app alone does not synchronize devices.
 
-Supabase is the proposed backend for authentication, database storage, and server-enforced household roles. Its [row-level security documentation](https://supabase.com/docs/guides/database/postgres/row-level-security) describes database access policies integrated with authentication. Choose a managed static web host separately. Provider selection and operating budget are not yet final.
+Cloudflare is the selected hosting vendor for the pilot, using its free tier. The deployment configuration uses Workers Static Assets to serve the existing Vite build. Static asset requests are [free and unlimited](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/); dynamic backend services have separate limits. See the [Cloudflare pilot setup](cloudflare-pilot.md) for configuration, validation, and rollout details.
+
+Supabase is the selected backend for authentication, database storage, and server-enforced household roles. The project is `trvzxycxwnuodicdkfjp`. The [backend setup](supabase-backend.md) covers the initial implementation, provisioning, and remaining milestone work. Its [row-level security documentation](https://supabase.com/docs/guides/database/postgres/row-level-security) describes database access policies integrated with authentication.
 
 Retain React and evaluate [Capacitor](https://capacitorjs.com/docs) for iOS and Android packaging. Store distribution still needs native testing and review; packaging is not an approval guarantee. iOS builds require the [Xcode toolchain](https://capacitorjs.com/docs/getting-started/environment-setup), using a Mac or an appropriate hosted macOS build environment.
 
 Current planning costs: [Apple Developer Program](https://developer.apple.com/programs/enroll/) membership is USD 99 per year, and [Google Play registration](https://support.google.com/googleplay/android-developer/answer/6112435?hl=en) is USD 25 once. New personal Google Play accounts are subject to [closed-testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en-GB), currently at least 12 opted-in testers for 14 continuous days before applying for production access. Hosting and build services are separate costs. These facts were checked September 7, 2026.
 
+## Hosted setup checkpoint — September 7, 2026
+
+Cloudflare deployment is live at [turntally-pilot.turntally-family.workers.dev](https://turntally-pilot.turntally-family.workers.dev). HTTPS assets, navigation fallback, Supabase cross-origin Auth access, and rejection of unauthenticated household reads passed verification. The owner should now sign in at this URL using the existing account, without another import. Public signup and anonymous sign-in are both verified disabled; Email is enabled. See the [deployment record](cloudflare-pilot.md).
+
+Supabase MCP access is verified and initial migration `20260907225429` is applied. The local hosted client is configured and builds successfully. All 147 tests pass, with live database privilege and unprovisioned-access checks also passing. The owner completed sign-in and JSON backup import; database verification confirmed revision 1 with 6 people, 5 activities, 6 history events, and an active administrator linkage. The owner's database load function returns the saved family successfully. The owner also confirmed that a second browser session loaded the existing family and received another session's edit after **Refresh**. Parent-managed viewer enrollment/revocation is the next unfinished account feature. Live competing-edit tests, separate physical-device testing, Auth settings, and the pre-existing `rls_auto_enable` helper's permissions still need verification. See the [backend handoff](supabase-backend.md#current-handoff--september-7-2026) for details and remaining feature 4 work.
+
 ## Decisions to settle next
 
-- Before item 4: choose viewer device enrollment, hosting budget, and the initial offline policy.
+- For item 4: complete authenticated project setup, viewer device enrollment, and offline behavior. Cloudflare hosting, Supabase backend, and a free-tier pilot budget are selected.
 - Before item 6: confirm store account ownership and access to iOS build/test infrastructure.
 
 ## Feature 1 acceptance criteria
@@ -71,3 +82,28 @@ Rewards, allowance, groceries, meal planning, reminders, carpooling, and packing
 - Deactivation immediately removes a person from the local profile picker. Participation ends at each activity's next turn boundary, preserving current turns and prior corrections. Pending schedule edits survive. Activities with too few participants record no assignment and show “Needs participants.”
 - Every user edit action checks the stored role, so a stale editor view cannot save after the role is revoked. Automatic assignment recording is still a system operation when loading the app; it does not allow viewers to choose or correct outcomes.
 - The local profile picker is deliberately unauthenticated, is labeled as a prototype, and requires a selection after refresh. Anyone with access to the browser can select another profile or alter local storage. It is not suitable for distributing restricted child access until authenticated sessions and server authorization are built.
+
+## Feature 2 behavior and limits
+
+- Archive an activity from its detail screen. It moves to the collapsed Archived activities list and retains its recorded turns, balances, and corrections. Editors may still correct archived history, but settings edits require restoring the activity first.
+- The current daily or weekly turn is preserved. No subsequent turns are generated during the archive period. Restoring while that original turn is still underway keeps it; restoring after the gap resumes with a turn on the restore date. A resumed weekly rotation uses that date as its new seven-day boundary.
+- Backups contain the complete configuration and event history, including roles, inactive members, archived activities, and future configuration revisions. The format is identified as `turntally-backup`, version 1. Files are plain JSON, limited to 10 MB; no encryption or cloud backup is included.
+- Import validates types, supported schema version, dates, IDs, roles, participants, archive periods, and replay consistency. It rejects unsupported event types, invalid references, duplicate IDs, and conflicting corrections. Large scheduling ranges are rejected to keep validation bounded.
+- The preview compares current and incoming counts and lists incoming members and activities. An explicit checkbox and replacement action are required. Restoring replaces the entire local household rather than merging files. Unreported active turns after an older backup are counted as planned.
+- Permission checks use the current household, not roles asserted by the uploaded file. A fresh browser with no household may bootstrap from a backup. After restoration the local profile selection is cleared.
+- Configuration and events now share one atomic local-storage snapshot. Legacy keys are read and migrated on the next successful write. A failed storage write leaves the previous data intact; a changed household invalidates a stale restore preview.
+- Device sync and authenticated authorization remain feature 4.
+
+## Feature 3 behavior and limits
+
+Implemented September 7, 2026. All 127 web tests, lint, type checking, and the production build pass.
+
+- Open **Absences** to plan time away for an active family member across selected active activities. Both dates are included. Ranges start today or later; older turns are corrected through the activity's History.
+- Weekly attendance uses the turn's start date. An absence beginning midweek does not change that week's responsibility. An absence that includes the start date skips that entire turn even if the person returns midweek. Whole-turn corrections remain available for exceptions; partial-week splitting is out of scope.
+- New plans apply to turns starting today and future turns. Today's automatically counted turn can receive a saved replacement while retaining its original assignment. Explicitly reported outcomes, including manual attendance corrections, take precedence over plans for that turn. The range resumes at the next applicable turn.
+- Away participants are excluded from the activity's balance changes. Overlapping ranges count them away once. If too few people are available, no turn is counted. Nonparticipants are unaffected; the range applies if they join a selected activity during its dates. Roster revisions and archive periods still govern which turns exist.
+- **Cancel absence** removes a plan that has not begun. **End after today** shortens an ongoing plan through today. Both ask for confirmation. Turns already started remain intact, including the rest of a weekly turn. Other overlapping ranges still apply. To change today's attendance, correct that activity's turn; to extend an absence, add another range.
+- Recorded assignments store attendance so later changes to plans cannot rewrite history. Plan changes and any current-turn correction commit in one local-storage snapshot with a stale-state check. Failed writes preserve the original configuration and events.
+- Backups include plans and recorded attendance, with validation of dates, people, activities, and unique range IDs. Older backups without ranges still load.
+- Editors and administrators can manage absences. Viewers can read current, upcoming, and past ranges, with mutation restrictions also enforced in application actions. These remain local prototype role checks until feature 4.
+- Feature 4, hosted accounts and device sync, is next. History calendar has been added as feature 7.

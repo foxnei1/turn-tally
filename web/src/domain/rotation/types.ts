@@ -33,6 +33,7 @@ export interface Rotation {
   roster: readonly PersonId[]
   kind?: 'seating' | 'chore'
   revisions?: readonly RotationRevision[]
+  pauses?: readonly { from: CalendarDate; until?: CalendarDate }[]
 }
 
 export interface RotationRevision {
@@ -55,6 +56,17 @@ export interface ActivityDraft {
 export type BalanceMap = Readonly<Record<PersonId, number>>
 export type LastTurnMap = Readonly<Partial<Record<PersonId, CalendarDate>>>
 
+export interface AbsenceDraft {
+  personId: PersonId
+  activityIds: readonly RotationId[]
+  start: CalendarDate
+  end: CalendarDate
+}
+
+export interface AbsenceRange extends AbsenceDraft {
+  id: string
+}
+
 export interface HouseholdConfiguration {
   people: readonly Person[]
   rotation: Rotation
@@ -62,4 +74,5 @@ export interface HouseholdConfiguration {
   // The original rotation remains for compatibility with seating-only data.
   activities?: readonly Activity[]
   rolesInitialized?: boolean
+  absences?: readonly AbsenceRange[]
 }

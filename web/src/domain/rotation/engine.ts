@@ -182,7 +182,12 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
     }
     const slotId = `${rotation.id}:${date}`
     const recordedOutcome = outcomes.get(slotId)
-    const absentIds = recordedOutcome?.absentIds ?? []
+    const recordedAssignment = assignments.get(slotId)
+    // Freeze attendance with each assignment. Later range changes must never
+    // rewrite recorded history; explicit corrections override planned attendance.
+    const plannedAbsentIds = roster.filter((id) => configuration.absences?.some((range) =>
+      range.personId === id && range.activityIds.includes(rotation.id) && range.start <= date && date <= range.end))
+    const absentIds = recordedOutcome ? recordedOutcome.absentIds ?? [] : recordedAssignment ? recordedAssignment.absentIds ?? [] : plannedAbsentIds
     if (absentIds.some((id) => !roster.includes(id)) || new Set(absentIds).size !== absentIds.length) {
       throw new Error('Absent people must be unique members of the rotation.')
     }
@@ -190,15 +195,14 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
     const eligible = present.filter((personId) => consecutive[personId] < rotation.maxConsecutive)
     const candidates = eligible.length > 0 ? eligible : present
     const suggestedId = selectAssignee({ rotation, eligible: candidates, balances, lastTurn })
-    const recordedAssignment = assignments.get(slotId)
     const minimum = rotation.kind === 'chore' ? 1 : 2
-    const assigneeId = recordedAssignment ? recordedAssignment.personId : roster.length >= minimum ? suggestedId ?? roster[0] : null
+    const assigneeId = recordedAssignment ? recordedAssignment.personId : present.length >= minimum ? suggestedId : null
 
     if (assigneeId !== null && !roster.includes(assigneeId)) {
       throw new Error(`Recorded assignment is not in the rotation roster: ${slotId}`)
     }
 
-    const outcome: SlotOutcome = recordedOutcome?.outcome ?? 'assumed'
+    const outcome: SlotOutcome = recordedOutcome?.outcome ?? (absentIds.length ? 'absence' : 'assumed')
     let transaction = rotation.type === 'burden' ? -rotation.desirability : rotation.desirability
     let takerId: PersonId | null = assigneeId
     let servedById: PersonId | null = assigneeId
@@ -323,5 +327,6 @@ export function missingAssignmentEvents(
       eventId: `assignment:${record.slotId}`,
       slotId: record.slotId,
       personId: record.assigneeId,
+      absentIds: [...record.absentIds],
     }))
 }

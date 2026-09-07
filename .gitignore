@@ -13,6 +13,19 @@ dist/
 .env.*
 !.env.example
 
+# Local credentials, deployment state, and exported family data
+.dev.vars
+.dev.vars.*
+.wrangler/
+supabase/.temp/
+supabase/.branches/
+*.pem
+*.key
+*.p12
+*.pfx
+turntally-backup-*.json
+turntally-unsaved-change.json
+
 .idea/
 .vscode/
 *.swp

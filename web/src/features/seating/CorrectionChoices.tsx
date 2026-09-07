@@ -37,7 +37,7 @@ export function CorrectionChoices({ record, people, onChoose, onCancel }: Correc
       {editingAttendance ? (
         <>
           <p className="font-semibold text-stone-800">Who is away for this {weekly ? 'week' : 'day'}?</p>
-          <p className="mt-2 text-sm leading-6 text-stone-600">They won’t owe extra turns for this activity. We’ll choose from the people here. Everyone returns to this rotation the next {weekly ? 'week' : 'day'}.</p>
+          <p className="mt-2 text-sm leading-6 text-stone-600">They won’t owe extra turns for this activity. We’ll choose from the people here. This changes only this turn; planned absence ranges still apply to later turns.</p>
           <div className="mt-3 grid gap-2">
             {people.map((person) => (
               <label key={person.id} className={choiceClass + ' flex items-center gap-3'}>

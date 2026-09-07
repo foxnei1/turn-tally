@@ -9,6 +9,27 @@ export interface ActivityView extends RotationReplay {
   activity: Activity
 }
 
+export function isArchived(activity: Activity): boolean {
+  const last = activity.pauses?.at(-1)
+  return !!last && !last.until
+}
+
+export function changeActivityArchive(configuration: HouseholdConfiguration, events: readonly RotationEvent[], today: CalendarDate, id: string, archive: boolean): HouseholdConfiguration {
+  const view = replayActivities(configuration, events, today).find((item) => item.activity.id === id)
+  if (!view) throw new Error('This activity could not be found.')
+  const activity = view.activity
+  if (isArchived(activity) === archive) throw new Error(archive ? 'This activity is already archived.' : 'This activity is already active.')
+  const pauses = [...(activity.pauses ?? [])]
+  if (archive) {
+    const current = view.records.at(-1)
+    pauses.push({ from: current ? nextTurnDate(current.date, current.rotation ?? activity) : activity.startDate })
+  } else {
+    const last = pauses.at(-1)!
+    pauses[pauses.length - 1] = { ...last, until: today > last.from ? today : last.from }
+  }
+  return { ...configuration, activities: householdActivities(configuration).map((item) => item.id === id ? { ...item, pauses } : item) }
+}
+
 export function householdActivities(configuration: HouseholdConfiguration): readonly Activity[] {
   return configuration.activities ?? [{ ...configuration.rotation, kind: 'seating', startDate: configuration.startDate }]
 }
@@ -17,7 +38,7 @@ export function replayActivities(configuration: HouseholdConfiguration, events: 
   return householdActivities(configuration).map((activity) => ({
     activity,
     ...replayRotation({
-      configuration: { people: configuration.people, rotation: activity, startDate: activity.startDate },
+      configuration: { people: configuration.people, rotation: activity, startDate: activity.startDate, absences: configuration.absences },
       events: events.filter((event) => 'slotId' in event && event.slotId.startsWith(activity.id + ':')),
       endDate: today,
     }),
@@ -26,6 +47,7 @@ export function replayActivities(configuration: HouseholdConfiguration, events: 
 
 export function configureActivity(configuration: HouseholdConfiguration, draft: ActivityDraft, today: CalendarDate, id: string, existingView?: ActivityView): HouseholdConfiguration {
   const activities = householdActivities(configuration)
+  if (existingView && isArchived(existingView.activity)) throw new Error('Restore this activity before editing its settings.')
   const name = draft.name.trim()
   if (!name || name.length > 60) throw new Error('Use an activity name between 1 and 60 characters.')
   if (activities.some((activity) => activity.id !== id && activity.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {

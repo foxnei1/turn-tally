@@ -41,7 +41,7 @@ export function TodaySeatCard({ record, people, rotationName, dateLabel, onCorre
   let status = person ? person.name + '’s turn is recorded.' : 'Nobody gets credit or owes an extra turn.'
   if (assumed && person) status = canEdit ? 'We’ll count this as ' + person.name + '’s turn unless you change it.' : 'Counted as ' + person.name + '’s turn. An editor can record changes.'
   if (record.outcome === 'trade') status = person?.name + (chore ? ' handled the chore' : ' took the seat') + (assignee ? ' instead of ' + assignee.name : '') + '.'
-  if (record.assigneeId === null && assumed) { title = 'Needs participants'; status = 'No turn is counted until enough people share this activity.' }
+  if (record.assigneeId === null && !person && assumed) { title = record.absentIds.length ? 'Not enough people here' : 'Needs participants'; status = 'No turn is counted until enough people share this activity.' }
   if (record.outcome === 'no-trip') title = 'No trip this day'
   if (record.outcome === 'adult-cover') title = chore ? 'Covered by someone else' : 'An adult took the seat'
   if (record.outcome === 'excused' && chore) title = 'Not needed this turn'
