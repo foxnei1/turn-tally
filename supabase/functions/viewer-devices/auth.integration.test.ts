@@ -7,6 +7,10 @@ import { supabaseDevicePorts } from './supabasePorts.ts'
 function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)
 }
+function errorCode(error: { code?: string; status?: number } | null) {
+  const code = error?.code && /^[a-zA-Z0-9_]+$/.test(error.code) ? error.code : 'unknown'
+  return `${code}, HTTP ${error?.status ?? 'unknown'}`
+}
 Deno.test('isolated Auth: signup disabled, no enrollment email, viewer sessions and revocation', async () => {
   const url = Deno.env.get('TT_TEST_SUPABASE_URL') ?? ''
   check(url === 'http://127.0.0.1:54321', 'Start the isolated local Supabase stack first; remote projects are forbidden.')
@@ -19,6 +23,7 @@ Deno.test('isolated Auth: signup disabled, no enrollment email, viewer sessions 
   const settingsResponse = await fetch(url + '/auth/v1/settings', { headers:{ apikey:anonKey } })
   const settings = await settingsResponse.json()
   check(settings.disable_signup === true && settings.external?.anonymous_users === false, 'Public and anonymous signup must remain disabled.')
+  check(settings.external?.email === true, 'Email sign-in must be enabled for provisioned accounts.')
   const mailCount = async () => {
     const response = await fetch('http://127.0.0.1:54324/api/v1/messages')
     check(response.ok, 'Local Mailpit must be running to verify no email was sent.')
@@ -27,11 +32,13 @@ Deno.test('isolated Auth: signup disabled, no enrollment email, viewer sessions 
     return data.total as number
   }
   const beforeMail = await mailCount()
+  const publicSignup = await anonymous.auth.signUp({ email:`${crypto.randomUUID()}@test.turntally.invalid`, password:crypto.randomUUID() + 'Aa1!' })
+  check(publicSignup.error?.code === 'signup_disabled', 'Email provider enablement must not allow public signup.')
   const password = crypto.randomUUID() + 'Aa1!'
   const parent = await admin.auth.admin.createUser({ email:`${crypto.randomUUID()}@test.turntally.invalid`, password, email_confirm:true })
   check(!parent.error && parent.data.user, 'Could not create the isolated parent fixture.')
   const signed = await anonymous.auth.signInWithPassword({ email:parent.data.user.email!, password })
-  check(!signed.error && signed.data.session, 'Isolated parent sign-in failed.')
+  check(!signed.error && signed.data.session, `Isolated parent sign-in failed (${errorCode(signed.error)}).`)
   const parentToken = signed.data.session.access_token
   const snapshot = { configuration:{ rolesInitialized:true, startDate:'2026-09-07', rotation:{}, people:[
     { id:'parent', name:'Test parent', role:'administrator', active:true },
@@ -72,9 +79,9 @@ Deno.test('isolated Auth: signup disabled, no enrollment email, viewer sessions 
   check(await mailCount() === beforeMail, 'Enrollment sent an email.')
   const viewer = viewers[0]
   const changed = await viewer.client.auth.updateUser({ password:crypto.randomUUID() + 'Aa1!', data:{ role:'administrator', viewer_only:false } })
-  check(!changed.error, 'Could not exercise viewer password/metadata changes.')
+  check(!changed.error, `Could not exercise viewer password/metadata changes (${errorCode(changed.error)}).`)
   const emailChange = await viewer.client.auth.updateUser({ email:`${crypto.randomUUID()}@changed.turntally.invalid` })
-  check(!emailChange.error, 'Could not exercise viewer email change.')
+  check(!emailChange.error, `Could not exercise viewer email change (${errorCode(emailChange.error)}).`)
   const refreshed = await viewer.client.auth.refreshSession()
   check(!refreshed.error && refreshed.data.session, 'Viewer refresh did not preserve a session.')
   const loaded = await viewer.client.rpc('turntally_load')

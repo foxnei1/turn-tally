@@ -32,6 +32,8 @@ node web/scripts/test-viewer-auth.mjs
 
 The test refuses remote URLs and reads local keys directly from CLI status into the test process environment without printing them. Fixtures remain in the isolated `turntally-auth-tests` stack. Do not use this config or test against the live pilot. CI removes its disposable stack after the test.
 
+The local config keeps `auth.enable_signup = false` and anonymous sign-in disabled, while setting `auth.email.enable_signup = true`. Despite its name, the CLI maps the latter flag to the entire email provider's `ExternalEmailEnabled` setting; disabling it also blocks provisioned email sign-in. The integration test checks both the returned Auth settings and an actual rejected public signup request.
+
 ## Deployment order
 
 1. Require a passing `viewer-auth` integration job, inspect the migration, and repeat the two-browser flow in a test environment. The generated migration is `20260908000942_viewer_devices.sql`; do not edit the already deployed initial migration.
