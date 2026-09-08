@@ -108,3 +108,74 @@ Deno.test('isolated Auth: signup disabled, no enrollment email, viewer sessions 
   // Fixtures remain exclusively in the disposable local stack. The CI job
   // removes the stack without a backup; no live household is ever touched.
 })
+
+Deno.test('isolated Auth: adult recovery email, one-time link, password change and session revocation', async () => {
+  const url = Deno.env.get('TT_TEST_SUPABASE_URL') ?? ''
+  check(url === 'http://127.0.0.1:54321', 'Recovery tests forbid remote Supabase projects.')
+  const key = Deno.env.get('TT_TEST_SERVICE_ROLE_KEY') ?? ''
+  const anonKey = Deno.env.get('TT_TEST_ANON_KEY') ?? ''
+  check(key && anonKey, 'Local test keys are missing.')
+  const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+  const admin = createClient(url, key, options)
+  const requester = createClient(url, anonKey, options)
+  const recovery = createClient(url, anonKey, options)
+  const email = `${crypto.randomUUID()}@recovery.turntally.invalid`
+  const oldPassword = crypto.randomUUID() + 'Aa1!'
+  const newPassword = crypto.randomUUID() + 'Bb2!'
+  const created = await admin.auth.admin.createUser({ email, password: oldPassword, email_confirm: true })
+  check(!created.error && created.data.user, 'Could not create the isolated recovery fixture.')
+  const original = await requester.auth.signInWithPassword({ email, password: oldPassword })
+  check(!original.error && original.data.session, 'Recovery fixture could not sign in.')
+  const redirectTo = 'http://127.0.0.1:5173/auth/recovery'
+  const requested = await requester.auth.resetPasswordForEmail(email, { redirectTo })
+  check(!requested.error, `Recovery request failed (${errorCode(requested.error)}).`)
+
+  let messageId: string | undefined
+  for (let attempt = 0; attempt < 20 && !messageId; attempt++) {
+    const response = await fetch('http://127.0.0.1:54324/api/v1/messages')
+    check(response.ok, 'Mailpit messages unavailable.')
+    const messages = await response.json()
+    messageId = messages.messages?.find((m: { To?: { Address: string }[] }) => m.To?.some(to => to.Address === email))?.ID
+    if (!messageId) await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  check(messageId, 'No recovery email reached isolated Mailpit.')
+  const messageResponse = await fetch('http://127.0.0.1:54324/api/v1/message/' + encodeURIComponent(messageId))
+  check(messageResponse.ok, 'Could not read the isolated recovery email.')
+  const message = await messageResponse.json()
+  const links = Array.from(String(message.HTML).matchAll(/href="([^"]+)"/g), match => match[1].replaceAll('&amp;', '&'))
+  const link = links.find(value => {
+    const candidate = new URL(value)
+    return candidate.origin === url && candidate.pathname === '/auth/v1/verify' && candidate.searchParams.get('type') === 'recovery'
+  })
+  check(link, 'The default recovery template did not contain a local verification link.')
+  // Never follow email redirects automatically or print token-bearing URLs.
+  const verified = await fetch(link, { redirect: 'manual' })
+  await verified.body?.cancel()
+  check(verified.status === 303 || verified.status === 302, 'Recovery verification did not redirect.')
+  const destination = new URL(verified.headers.get('location') ?? '')
+  check(destination.origin + destination.pathname === redirectTo, 'Recovery escaped the allowlisted callback.')
+  const fragment = new URLSearchParams(destination.hash.slice(1))
+  check(fragment.get('type') === 'recovery' && fragment.has('access_token') && fragment.has('refresh_token'), 'Missing recovery session fragment.')
+  const set = await recovery.auth.setSession({ access_token: fragment.get('access_token')!, refresh_token: fragment.get('refresh_token')! })
+  check(!set.error, 'The recovery session was rejected.')
+  const user = await recovery.auth.getUser()
+  check(!user.error && user.data.user?.id === created.data.user.id, 'Recovery used the wrong identity.')
+  check((await recovery.rpc('turntally_load')).error?.code === '42501', 'Recovery granted family admission to an unprovisioned account.')
+  const update = await recovery.auth.updateUser({ password: newPassword })
+  check(!update.error, `Recovery password update failed (${errorCode(update.error)}).`)
+  check(!(await recovery.auth.signOut({ scope: 'global' })).error, 'Recovery sign-out failed.')
+  const oldRefresh = await requester.auth.refreshSession({ refresh_token: original.data.session.refresh_token })
+  check(!!oldRefresh.error, 'Recovery failed to revoke the old refresh session.')
+  const login = createClient(url, anonKey, options)
+  check(!!(await login.auth.signInWithPassword({ email, password: oldPassword })).error, 'The old password still worked.')
+  const updated = await login.auth.signInWithPassword({ email, password: newPassword })
+  check(!updated.error && updated.data.user?.id === created.data.user.id, 'The new password did not recover the same account.')
+  check((await login.rpc('turntally_load')).error?.code === '42501', 'Password recovery bypassed household admission.')
+  const reused = await fetch(link, { redirect: 'manual' })
+  await reused.body?.cancel()
+  const reusedLocation = reused.headers.get('location')
+  check(reusedLocation && new URLSearchParams(new URL(reusedLocation).hash.slice(1)).has('error'), 'A used recovery link was not rejected.')
+  const settingsResponse = await fetch(url + '/auth/v1/settings', { headers: { apikey: anonKey } })
+  const settings = await settingsResponse.json()
+  check(settings.disable_signup === true && settings.external?.anonymous_users === false, 'Recovery changed signup settings.')
+})

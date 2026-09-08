@@ -10,6 +10,7 @@ import { ViewerPairing } from './ViewerPairing'
 import { DeviceManager } from './DeviceManager'
 import { deviceCommand } from './deviceApi'
 import type { Person } from '../../domain/rotation/types'
+import { RequestPasswordReset } from './PasswordRecovery'
 
 const buttonClass = 'rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white disabled:opacity-50'
 const inputClass = 'mt-1 block w-full rounded-xl border border-stone-300 bg-white p-3'
@@ -22,6 +23,7 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pairing, setPairing] = useState(false)
+  const [recovering, setRecovering] = useState(false)
   useEffect(() => {
     let active = true
     let authChanged = false
@@ -44,6 +46,7 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
 
   if (loading) return <PageShell><p className="m-8">Checking sign-in…</p></PageShell>
   if (session) return <FamilySession key={session.user.id} client={client} viewerHint={session.user.app_metadata?.turntally_viewer === true} onSignOut={signOut} />
+  if (recovering) return <RequestPasswordReset client={client} initialEmail={email} onBack={() => setRecovering(false)} />
   if (pairing) return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12"><h1 className="text-3xl font-semibold">TurnTally</h1><ViewerPairing client={client} onBack={() => setPairing(false)} /></main></PageShell>
   return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12">
     <h1 className="text-3xl font-semibold">Sign in to TurnTally</h1>
@@ -62,6 +65,7 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
       {error ? <p role="alert" className="text-red-700">{error}</p> : null}
       <button className={buttonClass} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
+    <button type="button" disabled={busy} className="mt-6 block font-semibold text-emerald-800" onClick={() => { setPassword(''); setError(null); setRecovering(true) }}>Forgot password?</button>
     <button type="button" disabled={busy} className="mt-8 font-semibold text-emerald-800" onClick={() => { setPassword(''); setError(null); setPairing(true) }}>Use as a viewer</button>
   </main></PageShell>
 }

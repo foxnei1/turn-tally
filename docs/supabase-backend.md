@@ -2,6 +2,8 @@
 
 Selected September 7, 2026 alongside Cloudflare hosting for the free-tier family pilot.
 
+Adult password recovery is now implemented but not deployed. The owner has no sending domain or custom SMTP service yet; see [account recovery](account-recovery.md) for the completed flow, tests, and required live configuration. The viewer deployment below remains the current live release.
+
 - Project URL: `https://trvzxycxwnuodicdkfjp.supabase.co`
 - Project reference: `trvzxycxwnuodicdkfjp`
 - GitHub connection: reported connected by the owner; remote settings have not been inspected from this session.
@@ -59,7 +61,7 @@ Historical initial setup record; the September 8 deployment above supersedes its
 ## Configure and provision
 
 1. Inspect existing migrations and tables in the connected project before applying migrations. The initial migration is already applied to this project; do not reapply it. The repository migration has also been tested in embedded PostgreSQL, using test versions of Supabase's auth schema and roles; this is not an end-to-end test of hosted Supabase Auth or PostgREST.
-2. Disable public user signup and anonymous sign-in in Supabase Auth. Provision the owner's adult email/password account through Supabase administration. No invitations or emails are sent by these setup files. Password recovery remains unimplemented; viewer enrollment must pass the release checks before distributing the pilot.
+2. Disable public user signup and anonymous sign-in in Supabase Auth. Provision the owner's adult email/password account through Supabase administration. No invitations or emails are sent by these setup files. Password recovery requires the SMTP and redirect setup in [account recovery](account-recovery.md) before deployment.
 3. With the migration applied, use an authenticated administrative SQL session to create the pilot household and owner membership, replacing the placeholder with the actual Auth user UUID:
 
 ```sql

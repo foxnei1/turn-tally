@@ -61,7 +61,7 @@ Supabase MCP access is verified and initial migration `20260907225429` is applie
 
 Milestone 4 step 1 is approved and step 2 is deployed: expiring pairing codes, personal/shared device identities, parent device management, transactional revocation, viewer access checks, and disconnect-before-adult-sign-in. All 172 local web tests and Edge type checking pass. Native Supabase Auth passed in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406), along with web and Python checks. The owner approved live personal/shared browser pairing; session persistence, server write denial, revocation, and adult-switch disconnection passed. Both test enrollments are revoked, with family data unchanged. The automatic-RLS helper's unnecessary client privileges are removed and its trigger still works. See the [deployment record](viewer-enrollment-release.md).
 
-Next: adult account recovery and remaining admission controls, followed by durable offline viewing and sync/conflict improvements. Separate physical-device validation, concurrent network redemption, and full server domain validation remain before broader distribution; milestone 4 as a whole is still in progress.
+Adult password recovery is implemented with an isolated reset session and automated tests; its deployment awaits a sending domain, custom SMTP, and live-email acceptance. See [account recovery setup](account-recovery.md). Remaining admission controls follow, then durable offline viewing and sync/conflict improvements. Separate physical-device validation, concurrent network redemption, and full server domain validation remain before broader distribution; milestone 4 as a whole is still in progress.
 
 ## Decisions to settle next
 

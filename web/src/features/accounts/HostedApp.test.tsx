@@ -8,6 +8,21 @@ import type { HouseholdSnapshot } from '../../data/RotationRepository'
 import { hostedFixture } from '../../test/hostedFixture'
 
 describe('hosted sign-in', () => {
+  it('opens adult password recovery from sign-in without loading a family', async () => {
+    const auth = {
+      onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+      getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+    }
+    const rpc = vi.fn()
+    render(<HostedApp client={{ auth, rpc } as unknown as SupabaseClient} />)
+    await userEvent.type(await screen.findByLabelText('Email'), 'parent@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Forgot password?' }))
+    expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveValue('parent@example.com')
+    expect(rpc).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }))
+    expect(screen.getByLabelText('Password')).toHaveValue('')
+  })
   it('previews local data and requires an explicit administrator choice and confirmation before migration', async () => {
     localStorage.clear()
     const local = new LocalStorageRotationRepository(localStorage)
