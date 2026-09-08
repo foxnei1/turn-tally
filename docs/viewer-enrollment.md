@@ -1,6 +1,6 @@
 # Viewer device enrollment
 
-Milestone 4, steps 1–2. Design approved September 7, 2026; implementation added September 8 UTC (September 7 local time). The migration, Edge Function, parent/device screens, and automated tests are in the repository. The real Auth integration check passed in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406). **Not deployed:** two-browser acceptance and deployment verification remain before updating the live pilot. See the [release instructions](viewer-enrollment-release.md).
+Milestone 4, steps 1–2. Design approved September 7, 2026; implemented and deployed September 8 UTC (September 7 local time). The migration, Edge Function, and parent/device screens are live. Real Auth integration passed in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406), followed by owner-approved personal/shared browser acceptance on the hosted app. See the [deployment record and release instructions](viewer-enrollment-release.md).
 
 ## Purpose and decisions
 
@@ -87,7 +87,7 @@ The pending proof and a delivered provisional session are retained only in the t
 
 The existing `viewer_only` membership cap and current-membership checks are useful foundations. Each enrollment needs its own Auth identity so revoking one device cannot revoke a sibling's device or the parent's normal account. Device names, purpose, optional person linkage, and revocation state are access records rather than rotation events and must not be accepted from backup imports.
 
-Personal enrollments can map to the existing member ID. Shared enrollments require an explicit household-viewer identity: the current load RPC and React app assume every signed-in identity has a person ID. Step 2 must update that assumption deliberately and render device identity separately, while preserving the existing adult role checks. Do not create fake roster members or assign the parent as the displayed actor to make shared tablets work.
+Personal enrollments map to the existing member ID. Shared enrollments use an explicit household-viewer identity: the load RPC and React app support a null person ID and render device identity separately while preserving the existing adult role checks. Shared tablets do not create fake roster members or display the parent as their actor.
 
 A server-side Supabase Edge Function coordinates pairing and Auth administration; Cloudflare continues serving static app files. It uses an operator-created Auth identity with a reserved UUID and an opaque `UUID@viewer.turntally.invalid` identifier, an administrator-generated one-time sign-in token, and redemption bound to the private request proof. The child supplies no email or password. Public signup and anonymous sign-in stay disabled.
 
@@ -107,4 +107,4 @@ Privileged Auth credentials stay in server-managed secrets. The coordinator veri
 - Pairing does not overwrite family data or alter household revision/history. Tests cover provisioning failure and lost redemption responses without active orphaned access.
 - Tokens and pairing proofs do not appear in logs, static bundles, URLs, backups, or repository files. Live public signup remains disabled.
 
-Step 1 is approved and step 2 is committed with passing browser, coordinator, database, and native Auth CI checks. No live schema, Auth settings, accounts, or deployed app behavior changed during implementation or CI testing.
+Step 1 is approved and step 2 is deployed with passing browser, coordinator, database, native Auth CI, and hosted browser checks. Live acceptance created two temporary viewer enrollments; both are now revoked and their browser sessions cleared. The family snapshot and revision were unchanged. Separate physical-device testing and concurrent network redemption remain checks before broader distribution.

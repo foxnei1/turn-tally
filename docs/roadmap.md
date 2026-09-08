@@ -1,6 +1,6 @@
 # TurnTally roadmap
 
-*Agreed feature sequence · September 7, 2026. Role defaults, initial release audience, Cloudflare hosting, and the Supabase backend are settled. Viewer enrollment and offline behavior remain to be completed.*
+*Agreed feature sequence · September 7, 2026; viewer deployment updated September 8 UTC. Role defaults, initial release audience, Cloudflare hosting, and the Supabase backend are settled. Viewer enrollment is live; recovery, offline behavior, and remaining sync work follow.*
 
 ## Agreed direction
 
@@ -25,7 +25,7 @@ Administrator is an authority level, not a requirement to participate in chores.
 
 Parents assign roles explicitly; do not infer edit access from a name, self-selected profile, or birthday. Adult children default to editors and cannot promote themselves. Viewer mode includes history and explanations but no corrections, confirmations, absence reports, configuration edits, imports, or resets. An administrator can later promote a viewer to editor. Preserve at least one administrator.
 
-Recommended account approach: separate adult sign-ins and parent-provisioned, revocable viewer access on children's devices without requiring child email addresses. The approved [viewer enrollment design](viewer-enrollment.md) uses device-displayed pairing codes approved by a signed-in parent, supports personal and shared devices, and has no scheduled reapproval. Its implementation is committed and the native Auth integration check passes in Docker-backed CI; deployment remains pending. Switching to an adult profile on a shared device must require authentication.
+Recommended account approach: separate adult sign-ins and parent-provisioned, revocable viewer access on children's devices without requiring child email addresses. The approved [viewer enrollment design](viewer-enrollment.md) uses device-displayed pairing codes approved by a signed-in parent, supports personal and shared devices, and has no scheduled reapproval. It is deployed with passing native Auth CI and hosted personal/shared browser acceptance. Switching to an adult profile on a shared device requires disconnection and authentication.
 
 ## Feature sequence
 
@@ -51,17 +51,21 @@ Current planning costs: [Apple Developer Program](https://developer.apple.com/pr
 
 ## Hosted setup checkpoint — September 7, 2026
 
+Historical initial setup; the viewer checkpoint below supersedes its pending deployment and helper-permission notes.
+
 Cloudflare deployment is live at [turntally-pilot.turntally-family.workers.dev](https://turntally-pilot.turntally-family.workers.dev). HTTPS assets, navigation fallback, Supabase cross-origin Auth access, and rejection of unauthenticated household reads passed verification. The owner should now sign in at this URL using the existing account, without another import. Public signup and anonymous sign-in are both verified disabled; Email is enabled. See the [deployment record](cloudflare-pilot.md).
 
 Supabase MCP access is verified and initial migration `20260907225429` is applied. The local hosted client is configured and builds successfully. All 147 tests pass, with live database privilege and unprovisioned-access checks also passing. The owner completed sign-in and JSON backup import; database verification confirmed revision 1 with 6 people, 5 activities, 6 history events, and an active administrator linkage. The owner's database load function returns the saved family successfully. The owner also confirmed that a second browser session loaded the existing family and received another session's edit after **Refresh**. Parent-managed viewer enrollment/revocation is now implemented locally; see the [viewer release checklist](viewer-enrollment-release.md) for the passing native Auth integration result and remaining deployment checks. Live competing-edit tests, separate physical-device testing, Auth settings, and the pre-existing `rls_auto_enable` helper's permissions still need verification. See the [backend handoff](supabase-backend.md#current-handoff--september-7-2026) for details and remaining feature 4 work.
 
 ## Viewer enrollment checkpoint — September 8 UTC
 
-Milestone 4 step 1 is approved and step 2 has a local implementation: expiring pairing codes, personal/shared device identities, parent device management, transactional revocation, viewer access checks, and disconnect-before-adult-sign-in. Automated browser/coordinator/database tests and Edge type checking cover the implementation. The native Supabase Auth job passed in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406), along with web and Python checks. The live pilot remains unchanged pending deployment and two-browser acceptance. See [release instructions](viewer-enrollment-release.md).
+Milestone 4 step 1 is approved and step 2 is deployed: expiring pairing codes, personal/shared device identities, parent device management, transactional revocation, viewer access checks, and disconnect-before-adult-sign-in. All 172 local web tests and Edge type checking pass. Native Supabase Auth passed in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406), along with web and Python checks. The owner approved live personal/shared browser pairing; session persistence, server write denial, revocation, and adult-switch disconnection passed. Both test enrollments are revoked, with family data unchanged. The automatic-RLS helper's unnecessary client privileges are removed and its trigger still works. See the [deployment record](viewer-enrollment-release.md).
+
+Next: adult account recovery and remaining admission controls, followed by durable offline viewing and sync/conflict improvements. Separate physical-device validation, concurrent network redemption, and full server domain validation remain before broader distribution; milestone 4 as a whole is still in progress.
 
 ## Decisions to settle next
 
-- For item 4: complete authenticated project setup, viewer device enrollment, and offline behavior. Cloudflare hosting, Supabase backend, and a free-tier pilot budget are selected.
+- For item 4: finish adult recovery/admission, offline behavior, synchronization, and remaining validation. Cloudflare hosting, Supabase backend, and viewer enrollment are deployed for the family pilot.
 - Before item 6: confirm store account ownership and access to iOS build/test infrastructure.
 
 ## Feature 1 acceptance criteria

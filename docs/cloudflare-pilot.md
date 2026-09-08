@@ -1,6 +1,12 @@
 # Cloudflare pilot
 
-Cloudflare was selected on September 7, 2026 for pilot hosting on the free tier. The initial hosted app was deployed the same day, using the live Supabase backend. Owner sign-in, backup import, and manual sync across browser sessions are working; viewer enrollment and the remaining account/device workflows are still in progress.
+Cloudflare was selected on September 7, 2026 for pilot hosting on the free tier. The initial hosted app was deployed the same day, using the live Supabase backend. Owner sign-in, backup import, and manual sync across browser sessions are working. Personal/shared viewer enrollment is now deployed and verified; recovery, offline viewing, and remaining synchronization work are still in progress.
+
+## Current release — September 8, 2026 UTC
+
+Version `c5c94c7f-ce11-4bfb-a9c3-5f6a40159c58` serves the viewer-enabled app. Deployment passed lint, TypeScript, all 172 web tests, the production build, and the hosted configuration guard. Published JavaScript/CSS exactly match the tested build, and SPA navigation fallback passes. The existing bundle-size warning remains.
+
+Supabase's viewer migrations and Edge Function version 1 were deployed first. The owner approved a personal and a shared viewer in two isolated browser sessions. Session persistence, server write rejection, revocation, and disconnect-before-adult-sign-in passed; both test devices are now revoked. The family snapshot and revision were unchanged. See the [viewer release record](viewer-enrollment-release.md) for exact checks and remaining physical-device validation.
 
 ## Hosting configuration
 
@@ -24,7 +30,7 @@ Validated September 7, 2026: lint, TypeScript checks, all 147 web tests, the hos
 
 Wrangler was authenticated with `npx wrangler login --device --browser=false`. For subsequent releases, run `npm run deploy`; it checks hosted configuration and runs the full web checks before publishing. Reauthenticate with the device login command if needed. The Cloudflare connector's authenticated session is separate from local Wrangler authentication. Never put credentials in the configuration or a client-side `VITE_*` variable. This is a manual deployment workflow; automatic deployment from GitHub has not been configured in this repository.
 
-The client is publicly reachable, with family data protected by Supabase sign-in and server-enforced household admission. Use the existing owner credentials at the live URL; the family is already stored in Supabase and does not need another import. Actual sign-in on the Cloudflare address and separate physical-device testing remain to be confirmed by the owner. The owner disabled public signup, and a subsequent live Auth settings check verified that both public signup and anonymous sign-in are disabled while Email remains enabled. Remaining account/device work and the existing database-helper permission finding are tracked in the [backend handoff](supabase-backend.md).
+The client is publicly reachable, with family data protected by Supabase sign-in and server-enforced household admission. Use the existing owner credentials at the live URL; the family is already stored in Supabase and does not need another import. The owner used the live administrator session for viewer approval; separate physical-device testing remains. The owner disabled public signup, and live Auth settings checks verified that both public signup and anonymous sign-in remain disabled while Email is enabled. Remaining account work and the resolved database-helper permission finding are tracked in the [backend handoff](supabase-backend.md).
 
 ## Hosted accounts and sync
 

@@ -55,6 +55,8 @@ describe('Supabase database authorization and concurrency', () => {
         $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
       grant usage on schema auth to authenticated, anon;
       grant execute on function auth.uid() to authenticated, anon;
+      create function public.rls_auto_enable() returns event_trigger language plpgsql security definer as $$ begin return; end $$;
+      grant execute on function public.rls_auto_enable() to anon, authenticated, service_role;
     `)
     const migrations = new URL('../../../supabase/migrations/', import.meta.url)
     for (const name of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) await db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -76,6 +78,13 @@ describe('Supabase database authorization and concurrency', () => {
     expect(result.rows[0].result.household_id).toBe(ids.otherFamily)
     await expect(db.query('select * from public.turntally_households')).rejects.toThrow(/permission denied/)
     await expect(db.query('update public.turntally_memberships set person_id = $1', ['parent'])).rejects.toThrow(/permission denied/)
+  })
+  it('restricts the hosted RLS event helper without removing operator access', async () => {
+    const result = await db.query<{ anon: boolean; authenticated: boolean; service: boolean }>(`select
+      has_function_privilege('anon','public.rls_auto_enable()','execute') as anon,
+      has_function_privilege('authenticated','public.rls_auto_enable()','execute') as authenticated,
+      has_function_privilege('service_role','public.rls_auto_enable()','execute') as service`)
+    expect(result.rows[0]).toEqual({ anon:false, authenticated:false, service:true })
   })
   it('rejects anonymous and unprovisioned access', async () => {
     await signIn('', 'anon')
