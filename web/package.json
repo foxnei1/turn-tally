@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:auth": "node scripts/test-viewer-auth.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",

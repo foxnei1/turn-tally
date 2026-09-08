@@ -9,7 +9,7 @@ export interface RotationRepository {
 export interface TurnTallyRepository extends RotationRepository {
   readonly hosted?: boolean
   readonly readOnly?: boolean
-  readonly identity?: { personId: string | null; role: import('../domain/rotation/types').FamilyRole | null }
+  readonly identity?: { personId: string | null; role: import('../domain/rotation/types').FamilyRole | null; device?: import('../features/accounts/deviceApi').ViewerDeviceIdentity }
   refresh?(): Promise<void>
   restoreSnapshot?(snapshot: HouseholdSnapshot, expectedState: string): Promise<void>
   loadConfiguration(): Promise<HouseholdConfiguration | null>

@@ -11,6 +11,7 @@ export interface HostedHousehold {
   revision: number
   person_id: string | null
   role: FamilyRole | null
+  device?: import('../features/accounts/deviceApi').ViewerDeviceIdentity
 }
 
 export class SyncConflictError extends Error {
@@ -33,9 +34,26 @@ export class SupabaseRotationRepository implements TurnTallyRepository {
   conflict: SyncConflictError | null = null
   constructor(client: Pick<SupabaseClient, 'rpc'>, notify = () => {}) { this.client = client; this.notify = notify }
 
-  get identity() { return { personId: this.state?.person_id ?? null, role: this.state?.role ?? null } }
+  get identity() { return { personId: this.state?.person_id ?? null, role: this.state?.role ?? null, device: this.state?.device } }
   get revision() { return this.state?.revision ?? 0 }
   get readOnly() { return this.identity.role === 'viewer' }
+
+  forget() { this.state = null; this.conflict = null }
+
+  async checkAccess(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const { data, error } = await Promise.race([
+        this.client.rpc('turntally_access'),
+        new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Access check timed out. Reconnect and refresh to continue.')), 15000) }),
+      ])
+      if (error || !data || data.household_id !== this.state?.household_id || data.role !== this.state?.role) {
+        throw new Error(error?.message ?? 'Family access changed. Reconnect to continue.')
+      }
+      // Deliberately preserve the current snapshot/revision for open forms.
+    } catch (error) { this.forget(); throw error }
+    finally { clearTimeout(timer) }
+  }
 
   async refresh(): Promise<void> {
     if (this.saving) throw new Error('Wait for the current save to finish.')

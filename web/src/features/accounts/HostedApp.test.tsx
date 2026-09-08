@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
@@ -68,5 +68,52 @@ describe('hosted sign-in', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Family access is not available')
     expect(screen.queryByRole('button', { name: 'Start the rotation' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Local profile')).not.toBeInTheDocument()
+  })
+  it('renders a shared viewer without impersonation and clears the family when focus detects revocation', async () => {
+    const client = {
+      auth: {
+        onAuthStateChange:vi.fn().mockReturnValue({ data:{ subscription:{ unsubscribe:vi.fn() } } }),
+        getSession:vi.fn().mockResolvedValue({ data:{ session:{ user:{ id:'device', app_metadata:{ turntally_viewer:true } } } }, error:null }),
+      },
+      rpc:vi.fn().mockResolvedValue({ data:{ household_id:'family', snapshot:hostedFixture(), revision:1, person_id:null, role:'viewer', device:{ id:'tablet', name:'Kitchen tablet', kind:'shared' } }, error:null }),
+    }
+    render(<HostedApp client={client as unknown as SupabaseClient} />)
+    expect(await screen.findByRole('heading', { name:'Your turns' })).toBeInTheDocument()
+    expect(screen.getByText('Family viewer')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name:'Add activity' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name:'Backups' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Local profile')).not.toBeInTheDocument()
+    expect(client.rpc.mock.calls.every(([name]) => name === 'turntally_load')).toBe(true)
+    client.rpc.mockResolvedValue({ data:null, error:{ code:'42501', message:'Device revoked' } })
+    await act(async () => fireEvent.focus(window))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Device revoked')
+    expect(screen.queryByRole('heading', { name:'Your turns' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Family viewer')).not.toBeInTheDocument()
+    expect(client.rpc).toHaveBeenLastCalledWith('turntally_access')
+  })
+  it('requires server disconnection before adult sign-in and keeps viewer mode if it fails', async () => {
+    const confirm = vi.spyOn(window,'confirm').mockReturnValue(true)
+    const client = {
+      auth: {
+        onAuthStateChange:vi.fn().mockReturnValue({ data:{ subscription:{ unsubscribe:vi.fn() } } }),
+        getSession:vi.fn().mockResolvedValue({ data:{ session:{ user:{ id:'device', app_metadata:{ turntally_viewer:true } } } }, error:null }),
+        signOut:vi.fn().mockResolvedValue({ error:null }),
+      },
+      functions:{ invoke:vi.fn().mockRejectedValueOnce(new Error('Reconnect to disconnect')).mockResolvedValue({ data:{ state:'disconnected' }, error:null }) },
+      rpc:vi.fn().mockResolvedValue({ data:{ household_id:'family', snapshot:hostedFixture(), revision:1, person_id:null, role:'viewer', device:{ id:'tablet', name:'Kitchen tablet', kind:'shared' } }, error:null }),
+    }
+    render(<HostedApp client={client as unknown as SupabaseClient} />)
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { name:'Your turns' })
+    await user.click(screen.getByRole('button', { name:'Sign in as an adult' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Reconnect to disconnect')
+    expect(client.auth.signOut).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name:'Your turns' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name:'Sign in as an adult' }))
+    expect(await screen.findByLabelText('Password')).toBeInTheDocument()
+    expect(client.auth.signOut).toHaveBeenCalledWith({ scope:'local' })
+    expect(client.functions.invoke).toHaveBeenLastCalledWith('viewer-devices', { body:{ action:'disconnect' } })
+    confirm.mockRestore()
   })
 })

@@ -23,18 +23,22 @@ import { AbsencesScreen } from '../features/absences/AbsencesScreen'
 interface AppProps {
   repository?: TurnTallyRepository
   today?: CalendarDate
+  onManageDevices?: () => void
 }
 
 function localToday(): CalendarDate {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
-function App({ repository: suppliedRepository, today = localToday() }: AppProps) {
+function App({ repository: suppliedRepository, today = localToday(), onManageDevices }: AppProps) {
   const repository = useMemo<TurnTallyRepository>(
     () => suppliedRepository ?? new LocalStorageRotationRepository(window.localStorage),
     [suppliedRepository],
   )
   const app = useTurnTally(repository, today)
+  const device = repository.identity?.device
+  // Presentation only: shared devices never become roster members or actors.
+  const displayIdentity = app.actor ?? (device?.kind === 'shared' ? { id: device.id, name: 'Family viewer', role: 'viewer' as const } : undefined)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<'new' | 'edit' | null>(null)
   const [familyOpen, setFamilyOpen] = useState(false)
@@ -43,7 +47,7 @@ function App({ repository: suppliedRepository, today = localToday() }: AppProps)
   const [archiving, setArchiving] = useState(false)
   const [absencesOpen, setAbsencesOpen] = useState(false)
 
-  const backups = <BackupsScreen key={app.actor?.id ?? 'empty'} canImport={!app.configuration || app.canAdminister} hasFamily={!!app.configuration} onExport={app.exportBackup} onPreview={app.previewBackup} onImport={async (text, expectedState) => {
+  const backups = <BackupsScreen key={displayIdentity?.id ?? 'empty'} canImport={!app.configuration || app.canAdminister} hasFamily={!!app.configuration} onExport={app.exportBackup} onPreview={app.previewBackup} onImport={async (text, expectedState) => {
     await app.importBackup(text, expectedState)
     setBackupsOpen(false); setSelectedId(null); setEditing(null); setFamilyOpen(false)
     setAbsencesOpen(false)
@@ -70,7 +74,7 @@ function App({ repository: suppliedRepository, today = localToday() }: AppProps)
   }
 
   const { people } = app.configuration
-  if (!app.configuration.rolesInitialized || !app.actor) {
+  if (!app.configuration.rolesInitialized || !displayIdentity) {
     if (repository.hosted) return <PageShell><p role="alert" className="m-8">Your account is no longer linked to an active family member. Sign out and contact the family administrator.</p></PageShell>
     return <PageShell><AccessSetup key={app.configuration.rolesInitialized ? 'profile' : 'administrator'} people={people} needsAdministrator={!app.configuration.rolesInitialized} onAdministrator={app.setupAdministrator} onProfile={app.selectProfile} /></PageShell>
   }
@@ -115,8 +119,8 @@ function App({ repository: suppliedRepository, today = localToday() }: AppProps)
       <main className="mx-auto w-full max-w-xl flex-1 px-5 py-10 sm:px-8">
         <div className="mb-6 border-b border-stone-300 pb-5">
           <div className="flex items-end justify-between gap-3">
-            {repository.hosted ? <div className="min-w-0 flex-1 text-sm text-stone-600"><p className="font-semibold text-stone-900">{app.actor.name}</p><p>{roleLabels[app.actor.role ?? 'viewer']}</p></div> : <label className="min-w-0 flex-1 text-sm text-stone-600">Local profile
-              <select value={app.actor.id} onChange={async (event) => {
+            {repository.hosted ? <div className="min-w-0 flex-1 text-sm text-stone-600"><p className="font-semibold text-stone-900">{displayIdentity.name}</p><p>{roleLabels[displayIdentity.role ?? 'viewer']}{device ? ` · ${device.name}` : ''}</p></div> : <label className="min-w-0 flex-1 text-sm text-stone-600">Local profile
+              <select value={displayIdentity.id} onChange={async (event) => {
                 setActionError(null)
                 try {
                   await app.selectProfile(event.target.value)
@@ -134,7 +138,8 @@ function App({ repository: suppliedRepository, today = localToday() }: AppProps)
           {!repository.hosted ? <details className="mt-2 text-xs leading-5 text-stone-500"><summary className="cursor-pointer">Local prototype · no sign-in yet</summary>Anyone using this browser can switch profiles. These controls preview roles; secure accounts will come with hosting and sync.</details> : null}
           {actionError ? <p role="alert" className="mt-2 text-sm text-red-700">{actionError}</p> : null}
         </div>
-        {backupsOpen && app.canEdit ? backups : absencesOpen ? <AbsencesScreen key={app.actor.id} configuration={app.configuration} today={today} canEdit={app.canEdit} onChange={app.changeAbsence} onBack={() => { setAbsencesOpen(false); setSelectedId(null) }} /> : familyOpen ? <FamilyScreen key={app.actor.id} people={people} activities={app.activities} canAdminister={app.canAdminister} onSave={app.saveMember} /> : editing && app.canEdit && !archived ? (
+        {familyOpen && app.canAdminister && onManageDevices ? <button className="mb-5 rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white" onClick={onManageDevices}>Devices</button> : null}
+        {backupsOpen && app.canEdit ? backups : absencesOpen ? <AbsencesScreen key={displayIdentity.id} configuration={app.configuration} today={today} canEdit={app.canEdit} onChange={app.changeAbsence} onBack={() => { setAbsencesOpen(false); setSelectedId(null) }} /> : familyOpen ? <FamilyScreen key={displayIdentity.id} people={people} activities={app.activities} canAdminister={app.canAdminister} onSave={app.saveMember} /> : editing && app.canEdit && !archived ? (
           <ActivityForm
             key={editing === 'edit' ? selectedId : 'new'}
             people={people.filter((person) => person.active !== false)}
@@ -155,10 +160,10 @@ function App({ repository: suppliedRepository, today = localToday() }: AppProps)
             </div>
             {archived ? <>
               <section className="rounded-3xl border border-stone-200 bg-white p-6"><p className="text-sm font-medium text-stone-500">Archived</p><h1 className="mt-2 text-2xl font-semibold text-stone-900">{selected.activity.name}</h1><p className="mt-3 text-sm leading-6 text-stone-600">No new turns will be counted. Recorded turns and corrections are kept below.</p>{app.canEdit ? <><p className="mt-3 text-sm leading-6 text-stone-600">Restoring resumes turns without counting the archived gap. If the original turn is still underway, it stays assigned.</p><button type="button" disabled={archiving} onClick={() => void changeArchive()} className="mt-4 rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white disabled:opacity-50">Restore activity</button></> : null}</section>
-              {selected.records.length ? <RotationHistory key={selected.activity.id + app.actor.id} records={selected.records} people={people} onCorrect={saveCorrection} canEdit={app.canEdit} /> : <p className="mt-4 text-sm text-stone-500">No turns were recorded before archiving.</p>}
+              {selected.records.length ? <RotationHistory key={selected.activity.id + displayIdentity.id} records={selected.records} people={people} onCorrect={saveCorrection} canEdit={app.canEdit} /> : <p className="mt-4 text-sm text-stone-500">No turns were recorded before archiving.</p>}
             </> : todayRecord ? <>
               <TodaySeatCard
-                key={todayRecord.slotId + app.actor.id}
+                key={todayRecord.slotId + displayIdentity.id}
                 record={todayRecord}
                 people={people.filter((person) => currentRotation!.roster.includes(person.id))}
                 rotationName={selected.activity.name}
@@ -169,7 +174,7 @@ function App({ repository: suppliedRepository, today = localToday() }: AppProps)
               {selected.activity.revisions?.some((revision) => revision.effectiveDate > today) ? (
                 <p className="mt-4 text-sm text-stone-600">Updated schedule and people take effect {format(parseISO(selected.activity.revisions.at(-1)!.effectiveDate), 'MMMM d')}.{app.canEdit ? ' View them in Edit activity.' : ''}</p>
               ) : null}
-              <RotationHistory key={selected.activity.id + app.actor.id} records={selected.records} people={people} onCorrect={saveCorrection} canEdit={app.canEdit} />
+              <RotationHistory key={selected.activity.id + displayIdentity.id} records={selected.records} people={people} onCorrect={saveCorrection} canEdit={app.canEdit} />
             </> : <section className="rounded-3xl border border-stone-200 bg-white p-6">
               <h1 className="text-2xl font-semibold text-stone-900">{selected.activity.name}</h1>
               <p className="mt-3 text-stone-600">Starts {format(parseISO(selected.activity.startDate), 'MMMM d, yyyy')}. The first turn is chosen from the people available that day.</p>

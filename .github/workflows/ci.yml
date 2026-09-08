@@ -33,3 +33,21 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run check
+
+  viewer-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check the Edge Function
+        run: npx --yes deno@2.9.6 check --frozen --config supabase/functions/viewer-devices/deno.json supabase/functions/viewer-devices/index.ts supabase/functions/viewer-devices/auth.integration.test.ts
+      - name: Start disposable Supabase with public signup disabled
+        run: npx --yes supabase@2.117.0 start --exclude realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Verify native Auth enrollment and revocation
+        run: node web/scripts/test-viewer-auth.mjs
+      - name: Remove disposable stack
+        if: always()
+        run: npx --yes supabase@2.117.0 stop --no-backup

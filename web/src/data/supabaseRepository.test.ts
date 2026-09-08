@@ -60,4 +60,27 @@ describe('Supabase repository', () => {
     await expect(repository.replaceSnapshot({ configuration: null, events: [] })).rejects.toThrow(/no family/)
     expect(rpc).toHaveBeenCalledTimes(1)
   })
+  it('checks authorization without adopting a newer revision and discards all data on denial', async () => {
+    const { repository, rpc, initial } = fixture()
+    await repository.refresh()
+    rpc.mockResolvedValueOnce({ data:{ ...initial, revision:99 }, error:null })
+    await repository.checkAccess()
+    expect(repository.revision).toBe(5)
+    rpc.mockResolvedValueOnce({ data:null, error:{ code:'42501', message:'Viewer access revoked' } })
+    await expect(repository.checkAccess()).rejects.toThrow('Viewer access revoked')
+    await expect(repository.readSnapshot()).rejects.toThrow(/Connect and load/)
+    expect(repository.conflict).toBeNull()
+  })
+  it('discards viewer data when an access request hangs instead of waiting indefinitely', async () => {
+    vi.useFakeTimers()
+    try {
+      const { repository, rpc } = fixture()
+      await repository.refresh()
+      rpc.mockImplementationOnce(() => new Promise(() => {}))
+      const pending = expect(repository.checkAccess()).rejects.toThrow(/timed out/)
+      await vi.advanceTimersByTimeAsync(15000)
+      await pending
+      await expect(repository.readSnapshot()).rejects.toThrow(/Connect and load/)
+    } finally { vi.useRealTimers() }
+  })
 })

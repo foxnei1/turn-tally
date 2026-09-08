@@ -6,6 +6,10 @@ import { PageShell } from '../../components/PageShell'
 import { LocalStorageRotationRepository } from '../../data/localStorageRepository'
 import { SupabaseRotationRepository } from '../../data/supabaseRepository'
 import { backupCounts, createBackup, MAX_BACKUP_BYTES, parseBackup, type Backup } from '../../domain/backups/backup'
+import { ViewerPairing } from './ViewerPairing'
+import { DeviceManager } from './DeviceManager'
+import { deviceCommand } from './deviceApi'
+import type { Person } from '../../domain/rotation/types'
 
 const buttonClass = 'rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white disabled:opacity-50'
 const inputClass = 'mt-1 block w-full rounded-xl border border-stone-300 bg-white p-3'
@@ -17,6 +21,7 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pairing, setPairing] = useState(false)
   useEffect(() => {
     let active = true
     let authChanged = false
@@ -34,10 +39,12 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
     const { error } = await client.auth.signOut({ scope: 'local' })
     if (error) throw error
     setSession(null)
+    setPairing(false)
   }
 
   if (loading) return <PageShell><p className="m-8">Checking sign-in…</p></PageShell>
-  if (session) return <FamilySession key={session.user.id} client={client} onSignOut={signOut} />
+  if (session) return <FamilySession key={session.user.id} client={client} viewerHint={session.user.app_metadata?.turntally_viewer === true} onSignOut={signOut} />
+  if (pairing) return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12"><h1 className="text-3xl font-semibold">TurnTally</h1><ViewerPairing client={client} onBack={() => setPairing(false)} /></main></PageShell>
   return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12">
     <h1 className="text-3xl font-semibold">Sign in to TurnTally</h1>
     <p className="mt-3 text-stone-600">Use the adult account set up for your family. This pilot has no public signup.</p>
@@ -55,21 +62,31 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
       {error ? <p role="alert" className="text-red-700">{error}</p> : null}
       <button className={buttonClass} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
+    <button type="button" disabled={busy} className="mt-8 font-semibold text-emerald-800" onClick={() => { setPassword(''); setError(null); setPairing(true) }}>Use as a viewer</button>
   </main></PageShell>
 }
 
-function FamilySession({ client, onSignOut }: { client: SupabaseClient; onSignOut: () => Promise<void> }) {
+function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClient; onSignOut: () => Promise<void>; viewerHint: boolean }) {
   const [, render] = useState(0)
   const repository = useMemo(() => new SupabaseRotationRepository(client, () => render((value) => value + 1)), [client])
   const [status, setStatus] = useState<'loading' | 'migration' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
   const [generation, setGeneration] = useState(0)
   const [online, setOnline] = useState(navigator.onLine)
+  const [devicesOpen, setDevicesOpen] = useState(false)
+  const [people, setPeople] = useState<readonly Person[]>([])
+  const [disconnecting, setDisconnecting] = useState(false)
+  // Remember device mode after revoked access clears the repository identity.
+  const [viewerDevice, setViewerDevice] = useState(viewerHint)
   useEffect(() => {
     let active = true
     void repository.refresh().then(async () => {
       const snapshot = await repository.readSnapshot()
-      if (active) setStatus(snapshot.configuration ? 'ready' : 'migration')
+      if (active) {
+        setStatus(snapshot.configuration ? 'ready' : 'migration')
+        setPeople(snapshot.configuration?.people ?? [])
+        if (repository.identity.device) setViewerDevice(true)
+      }
     }).catch((error: Error) => { if (active) { setError(error.message); setStatus('error') } })
     return () => { active = false }
   }, [repository, generation])
@@ -78,16 +95,52 @@ function FamilySession({ client, onSignOut }: { client: SupabaseClient; onSignOu
     window.addEventListener('online', update); window.addEventListener('offline', update)
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) }
   }, [])
+  useEffect(() => {
+    if (!viewerDevice || status !== 'ready') return
+    let active = true
+    let checking = false
+    const check = async () => {
+      if (!active || checking || document.visibilityState === 'hidden') return
+      checking = true
+      try { await repository.checkAccess() }
+      catch (error) {
+        if (active) {
+          repository.forget(); setPeople([]); setDevicesOpen(false); setStatus('error')
+          setError(error instanceof Error ? error.message : 'Reconnect to check viewer access.')
+        }
+      } finally { checking = false }
+    }
+    const resume = () => { void check() }
+    const timer = window.setInterval(resume, 60000)
+    window.addEventListener('focus', resume); window.addEventListener('online', resume)
+    document.addEventListener('visibilitychange', resume)
+    return () => {
+      active = false; window.clearInterval(timer)
+      window.removeEventListener('focus', resume); window.removeEventListener('online', resume)
+      document.removeEventListener('visibilitychange', resume)
+    }
+  }, [repository, viewerDevice, status])
+  async function leaveViewer() {
+    if (!window.confirm('Disconnect this viewer device and open adult sign-in? You will need to pair it again to return to viewer mode.')) return
+    setDisconnecting(true); setError(null)
+    try {
+      await deviceCommand(client, 'disconnect')
+      repository.forget(); setPeople([]); setDevicesOpen(false); setStatus('error')
+      await onSignOut()
+    } catch (error) { setError(error instanceof Error ? error.message : 'Disconnection failed. Reconnect and retry.') }
+    finally { setDisconnecting(false) }
+  }
   function refresh() {
     if (repository.conflict && !window.confirm('Refresh to the latest saved family? Download your attempted version first if you want to keep it.')) return
-    repository.conflict = null; setStatus('loading'); setError(null); setGeneration((value) => value + 1)
+    repository.conflict = null; setDevicesOpen(false); setStatus('loading'); setError(null); setGeneration((value) => value + 1)
   }
   return <>
     <div className="border-b border-stone-200 bg-white px-5 py-3 text-sm">
       <div className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3">
-        <p role="status">{online ? 'Shared family · refresh to see other devices’ changes' : 'Offline · reconnect to load or save changes'}</p>
+        <p role="status">{viewerDevice && status === 'ready' && online ? 'Connected · View only · ' : ''}{online ? 'Shared family · refresh to see other devices’ changes' : 'Offline · reconnect to load or save changes'}</p>
         <button type="button" disabled={!online || status === 'loading'} onClick={refresh} className="font-semibold text-emerald-800 disabled:opacity-50">Refresh</button>
-        <button type="button" onClick={() => void onSignOut().catch((error: Error) => setError(error.message))} className="font-semibold text-emerald-800">Sign out</button>
+        {viewerDevice ? <button type="button" disabled={!online || disconnecting} onClick={() => void leaveViewer()} className="font-semibold text-emerald-800 disabled:opacity-50">Sign in as an adult</button>
+          : <button type="button" onClick={() => void onSignOut().catch((error: Error) => setError(error.message))} className="font-semibold text-emerald-800">Sign out</button>}
       </div>
       {repository.conflict ? <div role="alert" className="mx-auto mt-3 max-w-xl text-red-700"><p>{repository.conflict.message}</p><button type="button" className="mt-2 underline" onClick={() => {
         const text = createBackup(repository.conflict!.proposed, format(new Date(), 'yyyy-MM-dd'))
@@ -98,7 +151,11 @@ function FamilySession({ client, onSignOut }: { client: SupabaseClient; onSignOu
       {error ? <p role="alert" className="mx-auto mt-3 max-w-xl text-red-700">{error}</p> : null}
     </div>
     {status === 'loading' ? <PageShell><p className="m-8">Loading your family…</p></PageShell>
-      : status === 'ready' ? <App key={generation} repository={repository} />
+      : status === 'ready' ? devicesOpen && repository.identity.role === 'administrator'
+        ? <PageShell><DeviceManager client={client} people={people} onBack={() => setDevicesOpen(false)} /></PageShell>
+        : <App key={generation} repository={repository} onManageDevices={() => {
+          void repository.readSnapshot().then(snapshot => { setPeople(snapshot.configuration?.people ?? []); setDevicesOpen(true) })
+        }} />
       : status === 'migration' ? <Migration repository={repository} onComplete={refresh} />
       : <PageShell><p className="m-8">Family access could not be loaded. Check your connection or ask the family owner to link your account, then refresh.</p></PageShell>}
   </>
