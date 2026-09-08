@@ -1,6 +1,6 @@
 # Viewer device enrollment
 
-Milestone 4, steps 1–2. Design approved September 7, 2026; implementation added September 8 UTC (September 7 local time). The migration, Edge Function, parent/device screens, and automated tests are in the repository. **Not deployed:** the real Auth integration check and two-browser acceptance test must pass before updating the live pilot. See the [release instructions](viewer-enrollment-release.md).
+Milestone 4, steps 1–2. Design approved September 7, 2026; implementation added September 8 UTC (September 7 local time). The migration, Edge Function, parent/device screens, and automated tests are in the repository. The real Auth integration check passed in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406). **Not deployed:** two-browser acceptance and deployment verification remain before updating the live pilot. See the [release instructions](viewer-enrollment-release.md).
 
 ## Purpose and decisions
 
@@ -91,7 +91,7 @@ Personal enrollments can map to the existing member ID. Shared enrollments requi
 
 A server-side Supabase Edge Function coordinates pairing and Auth administration; Cloudflare continues serving static app files. It uses an operator-created Auth identity with a reserved UUID and an opaque `UUID@viewer.turntally.invalid` identifier, an administrator-generated one-time sign-in token, and redemption bound to the private request proof. The child supplies no email or password. Public signup and anonymous sign-in stay disabled.
 
-Supabase documents server-only [Auth user creation](https://supabase.com/docs/reference/javascript/auth-admin-createuser), [link/OTP generation](https://supabase.com/docs/reference/javascript/auth-admin-generatelink), and [token-hash verification](https://supabase.com/docs/reference/javascript/auth-verifyotp). These are building blocks, not a verified TurnTally integration. Before production implementation, prove this flow in an isolated local/test environment with signup disabled, no outbound email, and the intended identifier format. Also test how identity email/password changes and session refresh interact with revocation; they must never remove the viewer cap or enable self-enrollment.
+Supabase documents server-only [Auth user creation](https://supabase.com/docs/reference/javascript/auth-admin-createuser), [link/OTP generation](https://supabase.com/docs/reference/javascript/auth-admin-generatelink), and [token-hash verification](https://supabase.com/docs/reference/javascript/auth-verifyotp). TurnTally's integration passed against an isolated Docker-backed Supabase stack in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406): public signup was rejected, enrollment sent no email, the intended identifier format worked, and email/password/metadata changes plus session refresh did not remove the viewer cap or restore revoked access. This does not replace hosted two-browser acceptance.
 
 Privileged Auth credentials stay in server-managed secrets. The coordinator verifies the parent and performs narrow, transactional authorization operations. Auth provisioning is external to the database transaction, so the lease/cleanup behavior above is required. A lost or failed provisioning operation must not grant access. Revoke membership before attempting Auth session cleanup, because revoking refresh tokens alone does not immediately invalidate an issued access token. See [Supabase sign-out behavior](https://supabase.com/docs/guides/auth/signout).
 
@@ -107,4 +107,4 @@ Privileged Auth credentials stay in server-managed secrets. The coordinator veri
 - Pairing does not overwrite family data or alter household revision/history. Tests cover provisioning failure and lost redemption responses without active orphaned access.
 - Tokens and pairing proofs do not appear in logs, static bundles, URLs, backups, or repository files. Live public signup remains disabled.
 
-Step 1 is approved and step 2 is implemented locally. No live schema, Auth settings, accounts, or deployed app behavior changed during implementation. The isolated native Auth integration check is a release requirement, not a claim established by mocked unit tests.
+Step 1 is approved and step 2 is committed with passing browser, coordinator, database, and native Auth CI checks. No live schema, Auth settings, accounts, or deployed app behavior changed during implementation or CI testing.

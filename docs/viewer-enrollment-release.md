@@ -1,6 +1,6 @@
 # Viewer enrollment release
 
-Implementation is local as of September 8, 2026 UTC. The live Cloudflare pilot still runs the adult-account release. No production migration or Edge Function has been deployed for viewer pairing.
+Implementation is committed and pushed as of September 8, 2026 UTC. Code commit `5cdab9b` passed all three jobs in [CI run 34175990406](https://github.com/foxnei1/turn-tally/actions/runs/34175990406), including real Supabase Auth in Docker. The live Cloudflare pilot still runs the adult-account release. No production migration or Edge Function has been deployed for viewer pairing.
 
 ## What is implemented
 
@@ -21,7 +21,7 @@ The Edge runtime has a pinned Deno lockfile. From the repository root:
 npx --yes deno@2.9.6 check --frozen --config supabase/functions/viewer-devices/deno.json supabase/functions/viewer-devices/index.ts supabase/functions/viewer-devices/auth.integration.test.ts
 ```
 
-The native Auth integration check requires Docker and the isolated local stack. Docker is not installed in the current Windows workspace, so this check has been type-checked but **has not run here**. The `viewer-auth` CI job provisions a disposable stack and runs the check. It verifies that signup is disabled, pairing sends no email through the local Mailpit server, personal/shared sessions are independent, provisional sessions cannot load data, password/email/metadata changes cannot elevate access, refresh cannot restore revoked access, and deactivation does not revive on reactivation.
+The native Auth integration check requires Docker and the isolated local stack. This Windows Server workspace has no Docker runtime, so the test ran successfully on GitHub's Ubuntu runner instead. The `viewer-auth` CI job provisions and removes a disposable stack. It verifies that signup is disabled, pairing sends no email through the local Mailpit server, personal/shared sessions are independent, provisional sessions cannot load data, password/email/metadata changes cannot elevate access, refresh cannot restore revoked access, and deactivation does not revive on reactivation.
 
 To run on a machine with Docker, from the repository root:
 
