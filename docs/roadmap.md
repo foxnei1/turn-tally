@@ -65,7 +65,7 @@ Parental password recovery is implemented with an isolated reset session and aut
 
 ## Decisions to settle next
 
-- [Parental account access](parental-access.md) is deployed with passing web, Python, and native Auth CI: authenticated linking codes, parent approval, account revocation, and fresh-sign-in requirements for reapproval. Supabase migration and viewer service updates are live, followed by Cloudflare version `aa50266b-7474-4b7f-b442-bed568182e9f`. Initial parental account creation remains operator-managed while email setup is deferred. Hosted acceptance with another provisioned parental account holder is the next manual check.
+- [Parental account access](parental-access.md) is deployed with passing web, Python, and native Auth CI: authenticated linking codes, parent approval, account revocation, and fresh-sign-in requirements for reapproval. Supabase migration and viewer service updates are live, followed by Cloudflare version `aa50266b-7474-4b7f-b442-bed568182e9f`. Initial parental account creation remains operator-managed while email setup is deferred. The owner confirmed successful hosted linking and profile association for a second parental account on September 8, 2026. Remaining manual checks include reload persistence, the assigned permissions, and revocation/reapproval.
 - For item 4: finish offline behavior, synchronization, and remaining validation. Email setup and recovery are deferred at the owner's request and disabled in the deployed app. Cloudflare hosting, Supabase backend, viewer enrollment, and parental access management are deployed for the family pilot.
 - Before item 6: confirm store account ownership and access to iOS build/test infrastructure.
 
