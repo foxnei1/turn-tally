@@ -14,6 +14,7 @@ export interface AssignmentRecorded extends EventBase {
 export interface OutcomeRecorded extends EventBase {
   type: 'outcome-recorded'
   slotId: SlotId
+  // The persisted adult-cover value is displayed as Parental coverage.
   outcome: 'as-scheduled' | 'trade' | 'outside-cover' | 'excused' | 'no-trip' | 'adult-cover' | 'absence'
   covererId?: PersonId
   absentIds?: readonly PersonId[]

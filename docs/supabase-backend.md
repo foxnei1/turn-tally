@@ -1,10 +1,10 @@
 # Supabase backend
 
-## Adult access release — September 8, 2026 Central
+## Parental access release — September 8, 2026 Central
 
-Commit `0871c9c` implements parent-managed adult linking and revocation. All three jobs passed in [CI run 34298601376](https://github.com/foxnei1/turn-tally/actions/runs/34298601376), including 200 web tests and real Auth sessions with concurrent approvals and old-session denial after reapproval. See [adult access](adult-access.md) for the flow and release order. Initial adult Auth account creation remains operator-managed.
+Commit `0871c9c` implements parent-managed parental linking and revocation. All three jobs passed in [CI run 34298601376](https://github.com/foxnei1/turn-tally/actions/runs/34298601376), including 200 web tests and real Auth sessions with concurrent approvals and old-session denial after reapproval. See [parental access](parental-access.md) for the flow and release order. Initial parental Auth account creation remains operator-managed.
 
-**Deployed:** migration `20260909012704_adult_access.sql`, `viewer-devices` version 2, and Cloudflare version `aa50266b-7474-4b7f-b442-bed568182e9f` are live. The local migration filename matches the remote timestamp, with the tested SQL unchanged. Owner load/access checks return administrator, and adult account listing succeeds under the owner's authenticated database identity. Revision 8, 12 history events, and the snapshot checksum are unchanged. Anonymous adult commands and direct client access to memberships/linking requests remain denied. No Auth accounts were created and no Auth settings were changed. Recovery remains disabled. See [Cloudflare hosting](cloudflare-pilot.md) and [adult acceptance checks](adult-access.md).
+**Deployed:** migration `20260909012704_adult_access.sql`, `viewer-devices` version 2, and Cloudflare version `aa50266b-7474-4b7f-b442-bed568182e9f` are live. The local migration filename matches the remote timestamp, with the tested SQL unchanged. Owner load/access checks return administrator, and parental account listing succeeds under the owner's authenticated database identity. Revision 8, 12 history events, and the snapshot checksum are unchanged. Anonymous parental commands and direct client access to memberships/linking requests remain denied. No Auth accounts were created and no Auth settings were changed. Recovery remains disabled. See [Cloudflare hosting](cloudflare-pilot.md) and [parental acceptance checks](parental-access.md).
 
 Post-migration advisors no longer report an executable public security-definer function. Six [RLS-without-policy information notices](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) are expected for RPC-only tables with direct client grants revoked. The pre-existing [disabled leaked-password protection warning](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) remains. Six [unused-index information notices](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index) cover access-lifecycle indexes in this small pilot; retain them for their lookup and foreign-key paths.
 
@@ -18,7 +18,7 @@ When redeploying this Edge Function through MCP, explicitly pass `import_map_pat
 
 Selected September 7, 2026 alongside Cloudflare hosting for the free-tier family pilot.
 
-Adult password recovery is now implemented but not deployed. The owner has no sending domain or custom SMTP service yet; see [account recovery](account-recovery.md) for the completed flow, tests, and required live configuration. The viewer deployment below remains the current live release.
+Parental password recovery is now implemented but not deployed. The owner has no sending domain or custom SMTP service yet; see [account recovery](account-recovery.md) for the completed flow, tests, and required live configuration. The viewer deployment below remains the current live release.
 
 - Project URL: `https://trvzxycxwnuodicdkfjp.supabase.co`
 - Project reference: `trvzxycxwnuodicdkfjp`
@@ -34,7 +34,7 @@ Adult password recovery is now implemented but not deployed. The owner has no se
 
 The client uses the existing bounded backup and rotation replay validator. Database validation covers snapshot shape, size, people, roles, unique event IDs, and allowed event types; full rotation/replay semantics are currently validated in the client, not reproduced in SQL. Complete server-side domain validation remains rollout work.
 
-Hosted mode provides email/password sign-in for provisioned adult accounts and removes the local profile selector. The owner's first sign-in previews a backup or existing data from the same browser origin, then explicitly links the chosen administrator and initializes the shared household. Local storage is not cleared. Existing backup restores use a separate administrator-only operation.
+Hosted mode provides email/password sign-in for provisioned parental accounts and removes the local profile selector. The owner's first sign-in previews a backup or existing data from the same browser origin, then explicitly links the chosen administrator and initializes the shared household. Local storage is not cleared. Existing backup restores use a separate administrator-only operation.
 
 Reads within an edit use a consistent cached revision. Other devices' changes are loaded with **Refresh**; this remounts the family view, so finish or cancel an open edit first. A stale write is rejected without an automatic retry. Its attempted snapshot remains in memory and can be downloaded before refreshing. The download is a full attempted family backup, not an automatic merge; review and reapply the intended change against the latest family. Closing the tab or signing out discards the in-memory attempt.
 
@@ -46,7 +46,7 @@ The approved [viewer enrollment design](viewer-enrollment.md) is deployed in mig
 
 - Applied viewer migration `20260908040813` and helper-permission migration `20260908040814`; repository filenames match the remote migration history. Edge Function `viewer-devices` version 1 is active. Cloudflare version `c5c94c7f-ce11-4bfb-a9c3-5f6a40159c58` serves the corresponding frontend.
 - The Edge Function bundles the exact public pilot origin as its default allowlist. `VIEWER_ALLOWED_ORIGINS` can override it; managed Supabase runtime credentials remain server-side. `VIEWER_TRUSTED_IP_HEADER` is unset. Public and anonymous signup remain disabled.
-- Owner-approved personal/shared browser pairing, persisted sessions after refresh, direct viewer write/management denial, old-token read denial after revocation, displayed-data clearing, and disconnect-before-adult-sign-in passed. Both temporary enrollments are revoked and their browser sessions cleared. The household snapshot and revision 5 were unchanged; owner membership remains active.
+- Owner-approved personal/shared browser pairing, persisted sessions after refresh, direct viewer write/management denial, old-token read denial after revocation, displayed-data clearing, and disconnect-before-parental-sign-in passed. Both temporary enrollments are revoked and their browser sessions cleared. The household snapshot and revision 5 were unchanged; owner membership remains active.
 - The pre-existing `public.rls_auto_enable()` event-trigger helper no longer grants execution to public, anonymous, or authenticated clients. Its owner/service privileges and `ensure_rls` trigger remain intact. A rolled-back live table-creation probe verified automatic RLS still works; the anonymous definer advisory is resolved.
 - The remaining [authenticated definer advisory](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) applies to the intentionally guarded `turntally_save`. RPC-only tables intentionally have [RLS without client policies](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy). Performance advisors report only [unused indexes](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index). Auth advisors also report [leaked password protection disabled](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection); that existing setting was not changed.
 - Local release validation passed 172 web tests, including 20 PostgreSQL authorization tests, lint, types, build, and frozen Edge type checking. Native Auth CI covers personal deactivation/reactivation and refresh behavior without changing the live roster. Account recovery, durable offline viewing, sync notifications, full server domain validation, separate physical-device testing, and concurrent network redemption remain outstanding.
@@ -77,7 +77,7 @@ Historical initial setup record; the September 8 deployment above supersedes its
 ## Configure and provision
 
 1. Inspect existing migrations and tables in the connected project before applying migrations. The initial migration is already applied to this project; do not reapply it. The repository migration has also been tested in embedded PostgreSQL, using test versions of Supabase's auth schema and roles; this is not an end-to-end test of hosted Supabase Auth or PostgREST.
-2. Disable public user signup and anonymous sign-in in Supabase Auth. Provision the owner's adult email/password account through Supabase administration. No invitations or emails are sent by these setup files. Password recovery requires the SMTP and redirect setup in [account recovery](account-recovery.md) before deployment.
+2. Disable public user signup and anonymous sign-in in Supabase Auth. Provision the owner's parental email/password account through Supabase administration. No invitations or emails are sent by these setup files. Password recovery requires the SMTP and redirect setup in [account recovery](account-recovery.md) before deployment.
 3. With the migration applied, use an authenticated administrative SQL session to create the pilot household and owner membership, replacing the placeholder with the actual Auth user UUID:
 
 ```sql
@@ -94,11 +94,11 @@ commit;
 
 4. Copy `web/.env.example` to `web/.env.local`. Set `VITE_SUPABASE_PUBLISHABLE_KEY` to the project's **publishable** key (`sb_publishable_...`). The URL is already filled in. Never use a secret or service-role key in the browser. Keep local prototype mode by leaving these settings absent or explicitly setting `VITE_TURNTALLY_MODE=local`.
 5. Start the app, sign in as the owner, preview the family backup, choose the matching administrator, and confirm migration. This initializes only the provisioned empty household and rejects a second initialization.
-6. Provision other adult Auth accounts and link each to the same household and its existing person ID through an administrative SQL session. Do not infer roles from emails or roster position. Adult account linkage remains operator-managed. The hosted Devices screen manages viewer enrollments only.
+6. Provision other parental Auth accounts and link each to the same household and its existing person ID through an administrative SQL session. Do not infer roles from emails or roster position. Parental account linkage remains operator-managed. The hosted Devices screen manages viewer enrollments only.
 
 ```sql
 insert into public.turntally_memberships (user_id, household_id, person_id)
-values ('ADULT_AUTH_USER_UUID'::uuid, 'PILOT_HOUSEHOLD_UUID'::uuid, 'EXISTING_PERSON_ID');
+values ('PARENTAL_AUTH_USER_UUID'::uuid, 'PILOT_HOUSEHOLD_UUID'::uuid, 'EXISTING_PERSON_ID');
 ```
 
 An administrator can deactivate a family member through the app; subsequent server reads and writes will reject that identity. To revoke a specific provisioned login through administration:

@@ -5,7 +5,7 @@ The daily screen now answers who takes the middle seat, with one correction acti
 ## Changed behavior
 
 - Corrections show the person who actually took the seat in both today's card and history.
-- “No trip this day” and “An adult took the seat” skip the turn without changing anyone's balance or advancing the last-turn order.
+- “No trip this day” and “Parental coverage” skip the turn without changing anyone's balance or advancing the last-turn order.
 - “Someone is away” records attendance for that day only. The absent person's balance is frozen, the present people share the turn, and an absent assignee is replaced. Fewer than two people present means no turn is counted.
 - Absence replacements are saved to keep later history corrections from silently changing the person shown.
 - Correction menus exclude absent people from the list of possible coverers. Attendance can be corrected from the same menu.
@@ -16,7 +16,7 @@ The daily screen now answers who takes the middle seat, with one correction acti
 
 The existing local-storage keys and event history are retained. New outcome kinds add neutral skips and day-specific attendance. Missing attendance on old outcomes means everyone was present.
 
-Historical `outside-cover` events retain their original effect and are labeled as using the previous penalty rule. Replacing one with the new adult-coverage option removes that penalty through an explicit correction. The Python reference engines remain historical, and the old concept is retained in `concept-v4.2.md`.
+Historical `outside-cover` events retain their original effect and are labeled as using the previous penalty rule. Replacing one with the new parental-coverage option removes that penalty through an explicit correction. The Python reference engines remain historical, and the old concept is retained in `concept-v4.2.md`.
 
 ## Validation
 

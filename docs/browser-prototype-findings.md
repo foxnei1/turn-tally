@@ -2,7 +2,7 @@
 
 *Daily seating vertical slice · August 2026*
 
-This documents the original prototype. The [September iteration](iteration-september-2026.md) replaces confirmation-first UI, numeric balance explanations, and the adult-cover penalty for new records, and adds day-specific absences and no-trip reporting.
+This documents the original prototype. The [September iteration](iteration-september-2026.md) replaces confirmation-first UI, numeric balance explanations, and the parental-cover penalty for new records, and adds day-specific absences and no-trip reporting.
 
 ## Outcome
 
@@ -16,7 +16,7 @@ The TypeScript checks cover the UI, local-storage adapter, and the daily burden 
 2. **An opened day is anchored.** When the app calculates a current assignment, it appends an `AssignmentRecorded` event. A later correction can change balances but cannot rewrite what the family had already seen.
 3. **No report means as assigned.** A past day without an outcome is shown as “Assigned; no change reported.” This follows the exception-only logging policy.
 4. **A family member covering is a burden trade.** The person who took the middle seat receives the normal burden credit.
-5. **An adult covering is an outside cover.** The original assignee receives the flipped transaction and will generally be offered the burden again sooner.
+5. **Parental coverage is an outside cover.** The original assignee receives the flipped transaction and will generally be offered the burden again sooner.
 6. **Corrections replace rather than edit history.** A new immutable outcome explicitly supersedes the previous active outcome for that day.
 7. **Local dates are calendar dates.** Slots use `yyyy-MM-dd` values derived in the browser’s local timezone.
 8. **Changing the family is a prototype reset.** It clears both configuration and event history after a browser confirmation.
@@ -26,7 +26,7 @@ The TypeScript checks cover the UI, local-storage adapter, and the daily burden 
 - Equal-weight daily rotations for household sizes two through eight over two years stay within one assignment of round robin.
 - Every tested transaction remains zero-sum within floating-point tolerance.
 - The consecutive-turn cap holds across a longer run.
-- Roster-member trades and adult outside covers apply different ledger effects.
+- Roster-member trades and parental outside covers apply different ledger effects.
 - Invalid trade recipients are rejected.
 - Displayed future assignments remain anchored after a late correction.
 - Concurrent outcomes fail closed until one replacement supersedes them.

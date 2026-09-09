@@ -2,9 +2,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import { createDeviceHandler, type Json } from './handler.ts'
 import { supabaseDevicePorts } from './supabasePorts.ts'
 
-Deno.test('isolated Auth: adult linking, concurrent admission and old-session denial after reapproval', async () => {
+Deno.test('isolated Auth: parental linking, concurrent admission and old-session denial after reapproval', async () => {
   const url = Deno.env.get('TT_TEST_SUPABASE_URL') ?? ''
-  check(url === 'http://127.0.0.1:54321', 'Adult access tests forbid remote projects.')
+  check(url === 'http://127.0.0.1:54321', 'Parental access tests forbid remote projects.')
   const key = Deno.env.get('TT_TEST_SERVICE_ROLE_KEY') ?? ''
   const anonKey = Deno.env.get('TT_TEST_ANON_KEY') ?? ''
   check(key && anonKey, 'Local test keys are missing.')
@@ -17,17 +17,17 @@ Deno.test('isolated Auth: adult linking, concurrent admission and old-session de
   }
   const beforeMail = await mailCount()
   async function account() {
-    const email = `${crypto.randomUUID()}@adult.turntally.invalid`; const password = crypto.randomUUID() + 'Aa1!'
+    const email = `${crypto.randomUUID()}@parental.turntally.invalid`; const password = crypto.randomUUID() + 'Aa1!'
     const created = await admin.auth.admin.createUser({ email,password,email_confirm:true })
-    check(!created.error && created.data.user,'Could not provision a disposable adult.')
+    check(!created.error && created.data.user,'Could not provision a disposable parental account.')
     const client = createClient(url,anonKey,options)
     const login = await client.auth.signInWithPassword({ email,password })
-    check(!login.error && login.data.session,'Could not sign in the disposable adult.')
+    check(!login.error && login.data.session,'Could not sign in the disposable parental account.')
     return { client,email,password,id:created.data.user.id,session:login.data.session }
   }
   const parent = await account(); const target = await account(); const outsider = await account(); const racer = await account()
   const snapshot = { configuration:{ rolesInitialized:true,startDate:'2026-09-07',rotation:{},people:[
-    { id:'parent',name:'Parent',role:'administrator',active:true },{ id:'adult',name:'Adult',role:'editor',active:true },
+    { id:'parent',name:'Parent',role:'administrator',active:true },{ id:'adult',name:'Adult Child',role:'editor',active:true },
   ] },events:[] }
   async function household(owner: typeof parent) {
     const family = await admin.from('turntally_households').insert({ owner_user_id:owner.id,snapshot }).select('id').single()
@@ -38,17 +38,17 @@ Deno.test('isolated Auth: adult linking, concurrent admission and old-session de
   const family = await household(parent); await household(outsider)
   async function command(client: typeof parent.client, operation: string, payload: Json = {}) {
     const result = await client.rpc('turntally_adult_command',{ operation,payload })
-    check(!result.error,`Adult ${operation} RPC failed (${errorCode(result.error)}).`)
+    check(!result.error,`Parental ${operation} RPC failed (${errorCode(result.error)}).`)
     return result.data
   }
   const request = await command(target.client,'start')
-  check((await target.client.rpc('turntally_load')).error?.code === '42501','Unlinked adult could read family data.')
+  check((await target.client.rpc('turntally_load')).error?.code === '42501','Unlinked parental account could read family data.')
   const approvals = await Promise.all([command(parent.client,'approve',{ code:request.code,person_id:'adult' }),command(parent.client,'approve',{ code:request.code,person_id:'adult' })])
   check(approvals.every(result => result.state === 'approved'),'Identical concurrent approvals were not idempotent.')
   const loaded = await target.client.rpc('turntally_load')
-  check(!loaded.error && loaded.data.role === 'editor' && loaded.data.household_id === family && loaded.data.revision === 0,'Adult approval changed role, household or revision unexpectedly.')
+  check(!loaded.error && loaded.data.role === 'editor' && loaded.data.household_id === family && loaded.data.revision === 0,'Parental approval changed role, household or revision unexpectedly.')
   check((await target.client.rpc('turntally_adult_command',{ operation:'list' })).error?.code === '42501','Editor could manage access.')
-  check((await command(parent.client,'revoke',{ user_id:target.id })).state === 'revoked','Adult revoke failed.')
+  check((await command(parent.client,'revoke',{ user_id:target.id })).state === 'revoked','Parental revoke failed.')
   check((await command(target.client,'eligibility')).state === 'signin_required','Revoked session can request reapproval.')
   check((await command(parent.client,'approve',{ code:request.code,person_id:'adult' })).code === 410,'Stale approval restored access.')
   const fresh = createClient(url,anonKey,options)
@@ -60,7 +60,7 @@ Deno.test('isolated Auth: adult linking, concurrent admission and old-session de
   check(!refreshed.error && refreshed.data.session,'Old session refresh could not exercise cutoff protection.')
   for (const name of ['turntally_load','turntally_access']) check((await target.client.rpc(name)).error?.code === '42501','Old refreshed session regained read access.')
   check((await target.client.rpc('turntally_save',{ expected_revision:0,proposed_snapshot:snapshot })).error?.code === '42501','Old refreshed session regained writes.')
-  check((await target.client.rpc('turntally_adult_command',{ operation:'list' })).error?.code === '42501','Old refreshed session regained adult administration.')
+  check((await target.client.rpc('turntally_adult_command',{ operation:'list' })).error?.code === '42501','Old refreshed session regained parental administration.')
   const handler = createDeviceHandler(supabaseDevicePorts(url,key,['http://127.0.0.1:5173']))
   async function devices(token: string) {
     const response = await handler(new Request(url + '/functions/v1/viewer-devices',{ method:'POST',headers:{ 'Content-Type':'application/json',Authorization:`Bearer ${token}` },body:JSON.stringify({ action:'list',actor_session_id:login.data.session!.access_token }) }))
@@ -75,7 +75,7 @@ Deno.test('isolated Auth: adult linking, concurrent admission and old-session de
   check(raced.filter(result => result.state === 'approved').length === 1 && raced.filter(result => result.code === 410).length === 1,'Cross-household admission did not produce exactly one winner.')
   const snapshotAfter = await admin.from('turntally_households').select('snapshot,revision').eq('id',family).single()
   check(!snapshotAfter.error && snapshotAfter.data.revision === 0 && snapshotAfter.data.snapshot.events.length === 0,'Access operations changed family history.')
-  check(await mailCount() === beforeMail,'Adult linking unexpectedly sent email.')
+  check(await mailCount() === beforeMail,'Parental linking unexpectedly sent email.')
 })
 
 // A real GoTrue/PostgREST check, intentionally restricted to the disposable
@@ -185,7 +185,7 @@ Deno.test('isolated Auth: signup disabled, no enrollment email, viewer sessions 
   // removes the stack without a backup; no live household is ever touched.
 })
 
-Deno.test('isolated Auth: adult recovery email, one-time link, password change and session revocation', async () => {
+Deno.test('isolated Auth: parental recovery email, one-time link, password change and session revocation', async () => {
   const url = Deno.env.get('TT_TEST_SUPABASE_URL') ?? ''
   check(url === 'http://127.0.0.1:54321', 'Recovery tests forbid remote Supabase projects.')
   const key = Deno.env.get('TT_TEST_SERVICE_ROLE_KEY') ?? ''

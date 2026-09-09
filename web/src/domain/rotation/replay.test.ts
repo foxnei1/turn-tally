@@ -50,7 +50,7 @@ describe('replayRotation', () => {
     expect(replay.records[0].deltas).toEqual({ a: 1 / 3, b: -2 / 3, c: 1 / 3 })
   })
 
-  it('flips a burden when an adult outside the roster covers', () => {
+  it('flips a burden when someone providing parental coverage outside the roster covers', () => {
     const events: RotationEvent[] = [{
       type: 'outcome-recorded',
       eventId: 'adult-1',

@@ -16,8 +16,8 @@ interface RotationHistoryProps {
 function outcomeLabel(record: RotationRecord): string {
   const chore = record.rotation?.kind === 'chore'
   if (record.outcome === 'trade') return chore ? 'Handled the chore instead' : 'Took the seat instead'
-  if (record.outcome === 'outside-cover') return 'Adult covered · previous penalty rule'
-  if (record.outcome === 'adult-cover') return chore ? 'Outside coverage · turn skipped' : 'Adult took the seat · turn skipped'
+  if (record.outcome === 'outside-cover') return 'Parental coverage · previous penalty rule'
+  if (record.outcome === 'adult-cover') return chore ? 'Outside coverage · turn skipped' : 'Parental coverage · turn skipped'
   if (record.outcome === 'no-trip') return 'No trip · turn skipped'
   if (record.outcome === 'excused' || !record.servedById) return 'Turn skipped'
   if (record.outcome === 'as-scheduled') return 'Recorded'

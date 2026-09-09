@@ -2,13 +2,13 @@
 
 The TurnTally client is a React and TypeScript app built with Vite. Tailwind handles styling, Vitest covers the pure domain and repository layers, and React Testing Library covers user interactions.
 
-On first launch, enter at least two family members in the order you want to start. The app starts a daily middle-seat rotation from the current local date. Unchanged turns count automatically. Use “Change who took it” to record a sibling covering, no trip, adult coverage, or someone away for that day. Assignments and corrections persist in `localStorage`.
+On first launch, enter at least two family members in the order you want to start. The app starts a daily middle-seat rotation from the current local date. Unchanged turns count automatically. Use “Change who took it” to record a sibling covering, no trip, parental coverage, or someone away for that day. Assignments and corrections persist in `localStorage`.
 
 The overview lists all activities with their current person. Use **Add activity** for a suggested or custom chore, then choose daily or weekly turns, participants, a starting person, and a start date. Kitchen duty defaults to daily; bathroom, living room, and dining room cleaning default to weekly. Weekly turns span seven days from the chosen date. Each activity has its own balance and history.
 
 Use **Edit activity** to rename an activity or change its schedule and participants. Schedule and roster changes begin at the next turn boundary; the current turn and earlier history retain their original schedule and roster. New activities may start today or later. Future activities can be edited before they begin.
 
-“Why [name]?” explains the assignment using the state before the turn. History stays collapsed until needed. No-trip days and adult coverage are neutral; absent members neither earn credit nor accrue extra turns. Historical adult-cover penalties remain readable and can be explicitly corrected. See the [current concept](../docs/concept.md) for the policy.
+“Why [name]?” explains the assignment using the state before the turn. History stays collapsed until needed. No-trip days and parental coverage are neutral; absent members neither earn credit nor accrue extra turns. Historical parental-cover penalties remain readable and can be explicitly corrected. See the [current concept](../docs/concept.md) for the policy.
 
 ## Commands
 
@@ -59,7 +59,7 @@ Administrators manage members and roles and may reset the household. Editors man
 
 Deactivating someone preserves their identity and history, hides their local profile, and removes them from each activity starting with its next turn. Pending cadence changes are retained. New or reactivated people must be explicitly enrolled in activities. Empty or undersized rotations keep their scheduled dates but record a null assignee and show “Needs participants”; later roster revisions can resume assignments.
 
-These are local prototype controls, not authenticated accounts. Anyone with access to this browser can switch profiles or alter local storage. Server-enforced permissions and authenticated adult profile access are part of the hosting/sync milestone.
+These are local prototype controls, not authenticated accounts. Anyone with access to this browser can switch profiles or alter local storage. Server-enforced permissions and authenticated parental profile access are part of the hosting/sync milestone.
 
 ## Archive and backups
 

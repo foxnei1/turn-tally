@@ -6,7 +6,7 @@ export function hostedFixture(): HouseholdSnapshot {
       rolesInitialized: true,
       people: [
         { id: 'parent', name: 'Parent', role: 'administrator', active: true },
-        { id: 'adult', name: 'Adult', role: 'editor', active: true },
+        { id: 'adult', name: 'Adult Child', role: 'editor', active: true },
         { id: 'child', name: 'Child', role: 'viewer', active: true },
       ],
       startDate: '2026-09-07',

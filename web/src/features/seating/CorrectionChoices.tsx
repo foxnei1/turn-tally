@@ -75,9 +75,9 @@ export function CorrectionChoices({ record, people, onChoose, onCancel }: Correc
               </button>
             ))}
             <button type="button" className={choiceClass} onClick={() => onChoose({ outcome: chore ? 'excused' : 'no-trip', absentIds })}>{chore ? 'Not needed this turn' : 'No trip this day'}</button>
-            <button type="button" className={choiceClass} onClick={() => onChoose({ outcome: 'adult-cover', absentIds })}>{chore ? 'Someone outside this activity covered' : 'An adult took the seat'}</button>
+            <button type="button" className={choiceClass} onClick={() => onChoose({ outcome: 'adult-cover', absentIds })}>{chore ? 'Someone outside this activity covered' : 'Parental coverage'}</button>
           </div>
-          <p className="mt-2 text-sm leading-6 text-stone-600">{chore ? 'Not needed or outside coverage skips this turn, with no credit or penalty.' : 'No trip or an adult taking the seat skips the turn, with no credit or penalty.'}</p>
+          <p className="mt-2 text-sm leading-6 text-stone-600">{chore ? 'Not needed or outside coverage skips this turn, with no credit or penalty.' : 'No trip or parental coverage skips the turn, with no credit or penalty.'}</p>
           <button type="button" className="mt-4 font-semibold text-emerald-800" onClick={() => setEditingAttendance(true)}>
             {absentIds.length > 0 ? 'Change who’s away' : 'Someone is away'}
           </button>

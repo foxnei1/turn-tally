@@ -9,20 +9,20 @@ const cast = (auth: object) => ({ auth }) as unknown as SupabaseClient
 const ready = () => Promise.resolve(Date.now() + 600000)
 afterEach(() => { window.history.replaceState(null, '', '/'); vi.useRealTimers() })
 
-describe('adult password recovery', () => {
+describe('parental password recovery', () => {
   it('requests the exact same-origin callback and gives a neutral response with a cooldown', async () => {
     const auth = { resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }) }
     render(<RequestPasswordReset client={cast(auth)} initialEmail="parent@example.com" onBack={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Send reset link' }))
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('parent@example.com', { redirectTo: window.location.origin + '/auth/recovery' })
-    expect(screen.getByRole('status')).toHaveTextContent('If this address has an adult account')
+    expect(screen.getByRole('status')).toHaveTextContent('If this address has a parental account')
     expect(screen.getByRole('button', { name: 'Wait a minute before retrying' })).toBeDisabled()
   })
   it('never renders provider errors containing account details', async () => {
     const auth = { resetPasswordForEmail: vi.fn().mockResolvedValue({ error: { code: 'email_address_not_authorized', message: 'private address detail' } }) }
     render(<RequestPasswordReset client={cast(auth)} initialEmail="unknown@example.com" onBack={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Send reset link' }))
-    expect(screen.getByRole('status')).toHaveTextContent('If this address has an adult account')
+    expect(screen.getByRole('status')).toHaveTextContent('If this address has a parental account')
     expect(screen.queryByText(/private address detail/)).not.toBeInTheDocument()
   })
   it('handles network failures without claiming a reset was requested', async () => {
@@ -53,7 +53,7 @@ describe('adult password recovery', () => {
       getUser: vi.fn().mockResolvedValue({ data: { user: { app_metadata: { turntally_viewer: true } } }, error: null }),
       signOut: vi.fn().mockResolvedValue({ error: null }),
     }
-    await expect(openRecoverySession(cast(auth), { access_token: 'test-access', refresh_token: 'test-refresh' })).rejects.toThrow('Adult recovery session required')
+    await expect(openRecoverySession(cast(auth), { access_token: 'test-access', refresh_token: 'test-refresh' })).rejects.toThrow('Parental recovery session required')
     expect(auth.getUser).toHaveBeenCalled()
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' })
   })

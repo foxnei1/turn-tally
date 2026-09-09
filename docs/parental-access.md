@@ -1,0 +1,76 @@
+# Parental account access
+
+Terminology decision, September 8, 2026: use **Parental** throughout product copy and current documentation, preserving **Adult Child** as a family role. Cloudflare version `82bc84ee-38c5-4bb7-bf9a-bf28988d4994` publishes this wording after all 200 web tests, lint, types, and build passed. Parental access includes approved editor accounts; the name does not grant administrator permissions. Components and this document use the new terminology. Applied SQL migration names, deployed RPC/private database identifiers, and the persisted `adult-cover` event value retain their original identifiers for existing clients, records, and backups. These compatibility identifiers are not interface labels; the legacy server authorization error is mapped to neutral sign-in guidance by the client.
+
+Deployed September 8, 2026 Central (September 9 UTC) for the next part of milestone 4. Implementation commit `0871c9c` passed all three jobs in [CI run 34298601376](https://github.com/foxnei1/turn-tally/actions/runs/34298601376): 200 web tests with lint/types/build, Python checks (49 passed and one existing expected failure), and three native Auth integration tests in disposable Supabase. Both staged secret scans were clean. Migration `20260909012704_adult_access.sql` matches the timestamp assigned by the live migration service; its SQL is unchanged from the tested implementation. The viewer coordinator is active at version 2, and Cloudflare version `aa50266b-7474-4b7f-b442-bed568182e9f` serves the parental linking and management screens. Email setup and password recovery remain deferred; `VITE_TURNTALLY_RECOVERY_ENABLED` defaults to false and also gates recovery callbacks before Auth client creation.
+
+The deployment reran all 200 web tests, lint, types, and the production build. Published HTML/JavaScript/CSS match the build; SPA routing, Auth origin access, disabled signup/anonymous access, and unauthenticated household rejection pass. The updated viewer service passes CORS/authentication and temporary pairing start/proof/poll/cancel checks without creating an Auth account. Database checks under the owner's authenticated identity return administrator access and the account list successfully; household revision 8, 12 events, and the snapshot checksum remain unchanged. Hosted linking with another parental account holder remains an owner-assisted acceptance step after operator provisioning; native CI already covers the complete approval/revocation/reapproval flow.
+
+## First delivery
+
+A family administrator can link an existing parental sign-in to a family member and revoke that login from **Family → Parental access**. The parental account holder proves control of their sign-in by displaying a short linking code. Approval uses the family member's existing role; linking does not assign or promote a role.
+
+Parental Auth accounts still need initial operator provisioning in this version. This removes manual household-linking SQL from everyday access management; it does not yet replace account creation. There are no emailed invitations or public signup. The operator must arrange initial credentials privately with the parental account holder; passwords must never enter repository files, chat, access-management screens, or logs. Creating an account with an administratively confirmed address does not prove ownership of that mailbox.
+
+| Decision | Proposed first version |
+|---|---|
+| Eligible account | Operator-provisioned parental account, signed in on its own browser |
+| Approval authority | Current family administrator with active parental membership |
+| Eligible profile | Existing active editor or administrator selected by the parent |
+| Linking | Eight-character code, valid for ten minutes |
+| Account scope | One household per account; no account transfers in this flow |
+| Permissions | Inherit current profile role; viewer device identities remain capped |
+| Removal | Revoke the selected parental login across its devices, preserving the person and history |
+| Restoring access | Fresh sign-in and a new parent-approved linking request |
+
+## Family-facing flow
+
+1. The parental account holder signs in with their provisioned account. If the server confirms that it has no active family access, show **Link my account**. A network failure instead shows a connection error and retry; it must not be mistaken for missing membership.
+2. **Get a linking code** displays a code such as `ABCD-EFGH`, its expiry, and **Cancel**. The pending screen contains no family directory or roster. The parental account holder shows the code to a parent on a separate device.
+3. The parent opens **Family → Parental access → Link parental account** and enters the code. The review shows the account email, clearly labeled as the sign-in address, and an eligible family-member selector. Email alone is not identity proof; the parent compares the code with the parental account holder's screen.
+4. The parent reviews the account, selected person, and that person's current permissions, then chooses **Approve access**. If the person needs a different role, the parent changes it through the existing Family screen first. No role picker appears in the linking flow.
+5. The parental account holder's screen detects approval and loads the existing family. No backup import, roster creation, password exchange, or session transfer occurs. A lost response can retry safely; it must not create duplicate membership or change the selected person.
+6. An expired, canceled, or rejected request offers a new code. Changing the signed-in account discards the pending request. A viewer device follows its existing disconnect-and-parental-sign-in flow before it can participate.
+
+The Parental access list shows the linked person, sign-in address, effective role, and active/revoked status. Each login has its own row; existing multiple logins for a person remain visible. New approvals warn if that person already has an active parental login. The parent must explicitly acknowledge adding another login; an existing linkage is never silently replaced.
+
+**Revoke access** names the affected login and explains that all its devices lose family access. It leaves the family member, activity participation, historical records, and separate viewer enrollments intact. The initial interface prevents revoking one's own current login or the household owner's login; ownership transfer is separate work. Server checks also preserve at least one active administrator with a parental login, including concurrent role edits, member deactivation, and backup restoration.
+
+## Authorization and lifecycle
+
+The linking code locates a request; it is not a credential. Each request is bound to the authenticated requester and its current Auth session. Status and cancellation require that identity and session. Only a currently authorized administrator can look up and approve a code. Requesters cannot choose a household, person, or role themselves.
+
+Approval derives the household from the approving administrator's stored membership and rechecks the selected person's active status and role at commit. An account already linked to another household is ineligible, including a revoked linkage. A request cannot remap an active login. Viewer eligibility is rejected using persistent membership/device records and trusted application metadata; changing user-editable metadata cannot bypass the viewer cap.
+
+Use an atomic transition from pending to approved together with membership creation or reactivation. Cancel, expire, and approve compete on the same request. A repeat approval succeeds only as an acknowledgement of the identical completed operation; it cannot change the mapping or reactivate access revoked afterward. Store an access generation with the completion result so a stale retry cannot affect a later grant.
+
+Revocation must deny subsequent family loads, writes, access checks, and management commands through current stored authorization. An already returned response cannot be recalled. Connected parental browsers recheck access every 60 seconds while visible, on focus, and on reconnect; denial clears family and management state. A changed role refreshes permissions without silently advancing an open edit's data revision. Connection failures disable editing and offer retry; durable offline behavior remains a later milestone.
+
+Reapproval must not revive sessions from before revocation. Retain a server-managed session cutoff when revoking access. A new linking request must use a session created after that cutoff, and every parental authorization path must enforce it after reapproval. Validate the JWT's session ID against its matching user in `auth.sessions`; refreshing a token from an older session must not satisfy the cutoff. Do not use client timestamps or JWT issue time as a substitute for session creation time. Supabase documents session-ID validation in its [session guide](https://supabase.com/docs/guides/auth/sessions).
+
+Deactivating a member also revokes their parental memberships and cancels pending approvals targeting them. Reactivating the roster member does not restore login access. Changing a parental profile to viewer reduces its existing login to view-only; it does not change a device identity into a parental account. The save/restore path must apply these rules transactionally alongside the existing viewer-deactivation behavior.
+
+## Implementation outline
+
+1. **Database operations and authorization.** Add private linking requests and access lifecycle metadata. Keep access records outside family snapshots and backups. Enforce bounded inputs, unique code hashes, explicit terminal states, and expiry based on server time. Keep RLS enabled and direct client table access revoked. Expose narrow authenticated operations with private privileged implementations and explicit execution grants. Apply session-cutoff checks to all parental authorization paths, including viewer-device administration.
+2. **Concurrency and abuse limits.** Use a consistent household-first lock order across approval, revocation, family saves, and device management; recheck actor membership under that lock. Cross-household attempts for one account must serialize on a stable account identity as well. Proposed limits: one live request per account, five starts per account per 15 minutes, ten code lookups/approvals per administrator per 15 minutes, and polling at most every five seconds. Enforce shared database counters, a global live-request cap of 100, and bounded cleanup with a retained-record cap of 5,000. Retain terminal requests for at most seven days; keep membership revocation/cutoff data for as long as the membership exists.
+3. **Parental screens.** Add the account-linking screen and parent Parental access list/review/revocation flow beside Devices. Fetch only the account information needed for an authorized review or the current household list; never expose a project-wide email search. Keep request codes and credentials out of URLs and logs. Access commands and responses must not be cached.
+4. **Regression and native Auth validation.** Cover authorization and races in real PostgreSQL tests, UI behavior in web tests, and actual signup-disabled Auth sessions in the disposable Docker-backed CI stack. Initial account creation stays with administration; Supabase's [createUser documentation](https://supabase.com/docs/reference/javascript/auth-admin-createuser) requires privileged server use.
+5. **Release preparation.** Gate the deferred recovery entry point and callback before deploying a newer frontend, since recovery code is already on main. Run the existing web, Python, and native Auth checks, inspect migration privileges/advisors, and prepare hosted acceptance with temporary parental accounts. A new release must not accidentally expose an email-dependent recovery flow that is still deferred.
+
+## Acceptance checks
+
+- An administrator links an operator-provisioned parental account to the intended active editor profile without SMTP or UUID entry; the parental account holder can edit but cannot administer access.
+- Linking an administrator profile grants its existing permissions only after explicit parent approval. Selecting an inactive/viewer profile fails. Forged role, person, household, or requester fields grant nothing.
+- Anonymous, unprovisioned-to-family, editor, viewer, deactivated, and revoked identities cannot list or manage household accounts. An authenticated unlinked parental account holder can manage only its own linking request.
+- Expiry, cancellation versus approval, two administrators approving different profiles, cross-household approval races, parent demotion, and profile deactivation produce one valid outcome without orphan access.
+- Repeating an approved request after revocation cannot restore it. Reapproval requires a new sign-in; old access tokens and refreshed old sessions remain denied afterward. A new valid session works.
+- Revoking one login leaves other logins, viewer devices, the roster, household revision, and history unchanged. Deactivation and backup restore preserve the last linked administrator and do not revive revoked accounts.
+- Session persistence, sign-out, connection failure, access denial, and role changes render correctly. Open unsaved edits never become authorized merely because the management UI is stale.
+- Public signup remains disabled, no email is sent, and existing viewer pairing, migration/import, and deferred recovery tests continue to pass.
+
+Local regression tests cover database authorization, linking, expiry/cancellation, additional-login confirmation, revocation/reapproval, session cutoffs, cross-household denial, deactivation, and rate limits. UI tests cover parent review/revocation, requester polling/cancellation, eligibility versus network failure, and the deferred recovery gate. Native CI adds real Auth sessions, concurrent identical and cross-household approvals, no-email verification, and old-session rejection after refresh and reapproval across load/save/parental management/viewer management. The disposable stack is the only target accepted by that test.
+
+The shared advisory lock serializes viewer and parental access operations; family locks precede request/membership changes. Account lifecycle remains outside rotation events and backups. Deactivated memberships keep a session cutoff; pending requests fail their approval-time session check, and completed requests cannot reactivate a later revoked access generation. Current memberships without a cutoff retain existing session behavior for compatibility; new linking operations always require a matching Auth session.
+
+Release order: require passing web/Python/native Auth CI, review database advisors, apply the new migration, redeploy the viewer Edge Function with session forwarding, then deploy the frontend with recovery disabled. Existing viewer operations remain compatible during the upgrade; an administrator reapproved after revocation needs the updated coordinator. Verify the owner still loads the existing family and retains administration. Hosted parental linking acceptance requires an operator-provisioned test parental and parent approval; never copy live passwords, linking codes, or tokens into a release record.

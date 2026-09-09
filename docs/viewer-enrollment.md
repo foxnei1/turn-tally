@@ -12,7 +12,7 @@ A parent can give a child's browser or a shared family tablet access to assignme
 | Supported devices | Personal devices and a shared family tablet | Approved; implemented |
 | Pairing expiry | 10 minutes from request creation; server clock is authoritative | Approved; implemented |
 | Ongoing enrollment | No scheduled reapproval; re-pair after revocation, disconnection, or loss of the stored session | Approved; implemented |
-| Shared-device adult use | Parent uses their own device for edits; switching accounts on the viewer device disconnects it first | Approved; implemented |
+| Shared-device parental use | Parent uses their own device for edits; switching accounts on the viewer device disconnects it first | Approved; implemented |
 | First delivery | Connected viewing; durable offline viewing follows in milestone 4, step 4 | Existing milestone sequence |
 
 An enrollment belongs to a browser profile or installed app, not a hardware identity. Another browser on the same phone needs its own pairing. Clearing browser data or losing a refresh session requires pairing again; no child password-recovery flow is introduced.
@@ -49,7 +49,7 @@ All viewer devices can read the family's assignments, activity history, explanat
 
 Viewers cannot correct outcomes, report absences, edit activities, manage people or devices, export/import backups, reset data, or approve another pairing. The server enforces these restrictions even if interface controls or requests are altered. Automatic local calculation of assignments does not authorize a viewer to persist events.
 
-A person's later promotion to editor or administrator never upgrades an existing viewer device. Adult editing requires a separately provisioned adult sign-in. Enrolling an adult's device as a viewer likewise does not grant editing rights.
+A person's later promotion to editor or administrator never upgrades an existing viewer device. Parental editing requires a separately provisioned parental sign-in. Enrolling a parental account holder's device as a viewer likewise does not grant editing rights.
 
 ## Device management and access lifetime
 
@@ -63,11 +63,11 @@ Every new server request checks current device authorization. Revocation prevent
 
 Durable offline viewing is not included in step 2. Its later implementation must establish a bounded cache lifetime and explain that an offline device cannot discover revocation until reconnecting. Do not describe a remote wipe or immediate offline revocation as guaranteed.
 
-## Shared devices and adult accounts
+## Shared devices and parental accounts
 
-A shared tablet stays in view-only mode. Parents use their personal signed-in devices to edit. No stored parent password, local adult profile picker, PIN-based role elevation, or automatic return to an old adult session is provided.
+A shared tablet stays in view-only mode. Parents use their personal signed-in devices to edit. No stored parent password, local parental profile picker, PIN-based role elevation, or automatic return to an old parental session is provided.
 
-If a parent chooses **Sign in as an adult** on a viewer device, explain that it will disconnect viewer access, require connectivity to revoke that enrollment and end its session, clear local family state, and then show the normal adult sign-in form. Completing adult sign-in grants only that adult account's actual permissions. It does not upgrade the revoked viewer identity. Returning the browser to viewer use requires ending the adult session and pairing again. If disconnection fails, remain in viewer mode and offer retry; do not leave an adult login behind a viewer-looking screen.
+If a parent chooses **Parental sign-in** on a viewer device, explain that it will disconnect viewer access, require connectivity to revoke that enrollment and end its session, clear local family state, and then show the normal parental sign-in form. Completing parental sign-in grants only that parental account's actual permissions. It does not upgrade the revoked viewer identity. Returning the browser to viewer use requires ending the parental session and pairing again. If disconnection fails, remain in viewer mode and offer retry; do not leave a parental login behind a viewer-looking screen.
 
 ## Pairing and authorization boundaries
 
@@ -87,7 +87,7 @@ The pending proof and a delivered provisional session are retained only in the t
 
 The existing `viewer_only` membership cap and current-membership checks are useful foundations. Each enrollment needs its own Auth identity so revoking one device cannot revoke a sibling's device or the parent's normal account. Device names, purpose, optional person linkage, and revocation state are access records rather than rotation events and must not be accepted from backup imports.
 
-Personal enrollments map to the existing member ID. Shared enrollments use an explicit household-viewer identity: the load RPC and React app support a null person ID and render device identity separately while preserving the existing adult role checks. Shared tablets do not create fake roster members or display the parent as their actor.
+Personal enrollments map to the existing member ID. Shared enrollments use an explicit household-viewer identity: the load RPC and React app support a null person ID and render device identity separately while preserving the existing parental role checks. Shared tablets do not create fake roster members or display the parent as their actor.
 
 A server-side Supabase Edge Function coordinates pairing and Auth administration; Cloudflare continues serving static app files. It uses an operator-created Auth identity with a reserved UUID and an opaque `UUID@viewer.turntally.invalid` identifier, an administrator-generated one-time sign-in token, and redemption bound to the private request proof. The child supplies no email or password. Public signup and anonymous sign-in stay disabled.
 
@@ -103,7 +103,7 @@ Privileged Auth credentials stay in server-managed secrets. The coordinator veri
 - Both device types load only the approved household. Every existing mutation is rejected for viewers, including direct RPC calls and forged role fields.
 - Revoking one device leaves other devices and the parent's account working. Old access and refresh tokens cannot restore household access. Personal-member deactivation revokes linked viewers; reactivation does not revive them.
 - Browser refresh preserves an enrolled session. Cleared storage or session loss returns to pairing. Pairing expiry never changes an already-enrolled device's lifetime.
-- A shared tablet never displays an adult session as a viewer session. Adult account switching follows the explicit disconnect/sign-in flow.
+- A shared tablet never displays a parental session as a viewer session. Parental account switching follows the explicit disconnect/sign-in flow.
 - Pairing does not overwrite family data or alter household revision/history. Tests cover provisioning failure and lost redemption responses without active orphaned access.
 - Tokens and pairing proofs do not appear in logs, static bundles, URLs, backups, or repository files. Live public signup remains disabled.
 

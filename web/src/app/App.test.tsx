@@ -76,8 +76,8 @@ describe('TurnTally prototype', () => {
     await user.click(screen.getByText('History', { selector: 'summary' }))
     await user.click(screen.getByRole('button', { name: 'Change turn for August 17' }))
     const editor = screen.getByRole('button', { name: 'Change who’s away' }).closest('fieldset')!
-    await user.click(within(editor).getByRole('button', { name: 'An adult took the seat' }))
-    await waitFor(() => expect(screen.getByText('Adult took the seat · turn skipped')).toBeInTheDocument())
+    await user.click(within(editor).getByRole('button', { name: 'Parental coverage' }))
+    await waitFor(() => expect(screen.getByText('Parental coverage · turn skipped')).toBeInTheDocument())
     expect(screen.getByRole('status')).toHaveTextContent('Elena’s turn')
     view.unmount()
     render(<App repository={repository} today="2026-08-18" />)

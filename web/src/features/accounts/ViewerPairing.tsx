@@ -114,6 +114,6 @@ export function ViewerPairing({ client, onBack }: { client: SupabaseClient; onBa
         storeRequest(null); setPending(null); onBack()
       } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not cancel. Reconnect and retry.') }
       finally { setBusy(false) }
-    }}>{pending ? 'Cancel pairing' : 'Back to adult sign-in'}</button>
+    }}>{pending ? 'Cancel pairing' : 'Back to parental sign-in'}</button>
   </section>
 }

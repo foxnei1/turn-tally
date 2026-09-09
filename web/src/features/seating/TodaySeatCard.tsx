@@ -43,10 +43,10 @@ export function TodaySeatCard({ record, people, rotationName, dateLabel, onCorre
   if (record.outcome === 'trade') status = person?.name + (chore ? ' handled the chore' : ' took the seat') + (assignee ? ' instead of ' + assignee.name : '') + '.'
   if (record.assigneeId === null && !person && assumed) { title = record.absentIds.length ? 'Not enough people here' : 'Needs participants'; status = 'No turn is counted until enough people share this activity.' }
   if (record.outcome === 'no-trip') title = 'No trip this day'
-  if (record.outcome === 'adult-cover') title = chore ? 'Covered by someone else' : 'An adult took the seat'
+  if (record.outcome === 'adult-cover') title = chore ? 'Covered by someone else' : 'Parental coverage'
   if (record.outcome === 'excused' && chore) title = 'Not needed this turn'
   if (record.outcome === 'outside-cover') {
-    title = 'An adult took the seat'
+    title = 'Parental coverage'
     status = 'An older rule made the assigned person due sooner. See the turn details.'
   }
 

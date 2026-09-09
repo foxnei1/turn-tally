@@ -18,7 +18,7 @@ The overview lists activities and their current person. Opening one shows the da
 
 There is no daily confirmation requirement. One seating turn covers the whole day. Days without a report count as planned, including days when the app was not opened.
 
-The correction menu offers family members, “No trip this day,” “An adult took the seat,” and “Someone is away.” Changes can also be made from history.
+The correction menu offers family members, “No trip this day,” “Parental coverage,” and “Someone is away.” Changes can also be made from history.
 
 Chores use “Change who did it,” “Not needed this turn,” and “Someone outside this activity covered.” A weekly correction describes the entire week's responsibility. Partial-week sharing is not supported yet.
 
@@ -32,7 +32,7 @@ Names can be edited immediately. Schedule and participant changes take effect wh
 
 - **A sibling takes the seat:** that sibling gets the credit. The original person remains due, unless they were away.
 - **No trip:** skip the day. Nobody gets credit or owes extra turns.
-- **An adult takes the seat:** skip the family turn, with no credit or penalty.
+- **Parental coverage:** skip the family turn, with no credit or penalty.
 - **Someone is away:** leave them out of this activity for the entire turn: one day or one week. Their existing balance stays unchanged. Choose from the people present. Seating needs two people present; a chore needs one. Planned absence ranges apply automatically to subsequent turns.
 - **A tie:** choose the person who has waited longest, then use the family's starting order.
 - **Repeated turns:** normally give someone a break after two turns in a row. If everyone present hits that limit, choose from those present.
@@ -77,7 +77,7 @@ The hosted pilot stores shared family data in Supabase. Other sessions load chan
 
 ## Existing data and reference code
 
-Existing browser assignments and corrections remain readable. Historical `outside-cover` events retain the old penalty so upgrading does not rewrite past records. The UI labels that old rule; changing the record to “An adult took the seat” explicitly replaces it with the neutral policy. New corrections never create an `outside-cover` event.
+Existing browser assignments and corrections remain readable. Historical `outside-cover` events retain the old penalty so upgrading does not rewrite past records. The UI labels that old rule; changing the record to “Parental coverage” explicitly replaces it with the neutral policy. New corrections never create an `outside-cover` event.
 
 The Python engines and their tests are historical validation of the [v4.2 shared-balance design](concept-v4.2.md). The TypeScript reducer and web tests define the current seating behavior. Porting additional Python behavior requires checking it against these revised rules.
 

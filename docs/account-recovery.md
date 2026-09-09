@@ -1,8 +1,8 @@
-# Adult account recovery
+# Parental account recovery
 
 **Deferred September 8, 2026 at the owner's request:** pause email/domain setup and recovery deployment while continuing the feature roadmap. The implemented recovery flow and tests remain available for a later release.
 
-The adult-access release adds `VITE_TURNTALLY_RECOVERY_ENABLED`, defaulting to false. It hides the request entry point and stops recovery callbacks before creating an Auth client, while still removing credentials from the URL. Set it to true only when preparing the configured recovery release and its live-email acceptance.
+The parental-access release adds `VITE_TURNTALLY_RECOVERY_ENABLED`, defaulting to false. It hides the request entry point and stops recovery callbacks before creating an Auth client, while still removing credentials from the URL. Set it to true only when preparing the configured recovery release and its live-email acceptance.
 
 Implemented September 8, 2026 UTC. **Not deployed:** the owner confirmed there is no sending domain or custom SMTP service yet. The live pilot remains on the verified viewer release. No live recovery email, password change, Auth configuration change, or household mutation was performed for this implementation.
 
@@ -10,7 +10,7 @@ Follow-up [free-service research](free-email-research.md) identified personal Gm
 
 ## Flow
 
-1. Choose **Forgot password?** on adult sign-in and enter the adult account's email.
+1. Choose **Forgot password?** on parental sign-in and enter the parental account's email.
 2. TurnTally requests a Supabase recovery email with a fixed same-origin `/auth/recovery` callback. The response does not disclose whether an account exists, and the screen imposes a 60-second retry cooldown. Supabase's server rate limits remain authoritative.
 3. Open the email link in a browser. The static app removes its token fragment from the URL before creating an Auth client, verifies the supplied session with Auth, and displays the new-password form. The default Supabase confirmation-link template is supported; no template customization is required.
 4. Enter and confirm a unique password of at least 12 characters. Auth enforces its configured password rules too. The recovery screen does not load family data or provide admission, roster, or role changes.
@@ -33,7 +33,7 @@ The owner has not selected a domain or email service. No purchase, subscription,
    Preserve any other intentionally configured URLs; do not add broad production wildcards. The checked-in `supabase/config.toml` configures only the disposable local stack, not the live project.
 4. Keep public signup and anonymous sign-in disabled and the Email provider enabled. Review the project's password policy and rate limits. Recovery does not create memberships or restore revoked family access. Supabase MCP in this workspace does not expose Auth configuration management; use the Dashboard for these settings.
 5. Require passing web and native Auth CI checks, then deploy with `npm run deploy` from `web`. Verify `/auth/recovery` is served by Cloudflare's SPA fallback and that a bare URL shows the invalid-link screen.
-6. With an explicitly approved test adult account, request one live reset email. Confirm delivery, callback origin, password update, rejection of the old password, sign-in with the new password, and rejection of a reused link. Confirm the account still has its existing family permissions and the household revision/history did not change. Never copy a recovery URL or token into logs, chat, or a bug report.
+6. With an explicitly approved test parental account, request one live reset email. Confirm delivery, callback origin, password update, rejection of the old password, sign-in with the new password, and rejection of a reused link. Confirm the account still has its existing family permissions and the household revision/history did not change. Never copy a recovery URL or token into logs, chat, or a bug report.
 
 Supabase's default SMTP is limited to project team addresses, currently two messages per hour, and is not intended for production. Do not add family members to the Supabase project team just to enable their recovery emails. Custom SMTP is needed for ordinary family accounts. See [SMTP configuration](https://supabase.com/docs/guides/auth/auth-smtp), [redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls), and [resetPasswordForEmail](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail).
 

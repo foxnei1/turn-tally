@@ -8,7 +8,7 @@ import type { HouseholdSnapshot } from '../../data/RotationRepository'
 import { hostedFixture } from '../../test/hostedFixture'
 
 describe('hosted sign-in', () => {
-  it.each([true,false])('offers adult linking only when the server confirms missing access (denied=%s)', async denied => {
+  it.each([true,false])('offers parental linking only when the server confirms missing access (denied=%s)', async denied => {
     const auth = {
       onAuthStateChange:vi.fn().mockReturnValue({ data:{ subscription:{ unsubscribe:vi.fn() } } }),
       getSession:vi.fn().mockResolvedValue({ data:{ session:{ user:{ id:'adult' } } },error:null }),
@@ -17,14 +17,14 @@ describe('hosted sign-in', () => {
       ? { data:{ state:'eligible' },error:null }
       : { data:null,error:{ code:denied ? '42501' : 'PGRST000',message:denied ? 'Access unavailable' : 'Network unavailable' } })
     render(<HostedApp client={{ auth,rpc } as unknown as SupabaseClient} />)
-    if (denied) expect(await screen.findByRole('heading',{ name:'Link your adult account' })).toBeInTheDocument()
+    if (denied) expect(await screen.findByRole('heading',{ name:'Link your parental account' })).toBeInTheDocument()
     else {
       expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
       expect(rpc.mock.calls.every(([name]) => name === 'turntally_load')).toBe(true)
       expect(screen.queryByRole('button',{ name:'Get a linking code' })).not.toBeInTheDocument()
     }
   })
-  it('opens adult password recovery from sign-in without loading a family', async () => {
+  it('opens parental password recovery from sign-in without loading a family', async () => {
     const auth = {
       onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
       getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
@@ -123,7 +123,7 @@ describe('hosted sign-in', () => {
     expect(screen.queryByText('Family viewer')).not.toBeInTheDocument()
     expect(client.rpc).toHaveBeenLastCalledWith('turntally_access')
   })
-  it('requires server disconnection before adult sign-in and keeps viewer mode if it fails', async () => {
+  it('requires server disconnection before parental sign-in and keeps viewer mode if it fails', async () => {
     const confirm = vi.spyOn(window,'confirm').mockReturnValue(true)
     const client = {
       auth: {
@@ -137,12 +137,12 @@ describe('hosted sign-in', () => {
     render(<HostedApp client={client as unknown as SupabaseClient} />)
     const user = userEvent.setup()
     await screen.findByRole('heading', { name:'Your turns' })
-    await user.click(screen.getByRole('button', { name:'Sign in as an adult' }))
+    await user.click(screen.getByRole('button', { name:'Parental sign-in' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Reconnect to disconnect')
     expect(client.auth.signOut).not.toHaveBeenCalled()
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name:'Your turns' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name:'Sign in as an adult' }))
+    await user.click(screen.getByRole('button', { name:'Parental sign-in' }))
     expect(await screen.findByLabelText('Password')).toBeInTheDocument()
     expect(client.auth.signOut).toHaveBeenCalledWith({ scope:'local' })
     expect(client.functions.invoke).toHaveBeenLastCalledWith('viewer-devices', { body:{ action:'disconnect' } })

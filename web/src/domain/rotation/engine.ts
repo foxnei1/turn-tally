@@ -239,7 +239,7 @@ export function replayRotation({ configuration, events, endDate }: ReplayInput):
     } else if (outcome === 'adult-cover' || outcome === 'excused') {
       explanation = 'This turn is skipped. Nobody gets credit or owes an extra turn.'
     } else if (outcome === 'outside-cover') {
-      explanation = 'This older record used the previous adult-cover rule: the assigned person became due sooner. Change it to adult coverage to remove that penalty.'
+      explanation = 'This older record used the previous parental-cover rule: the assigned person became due sooner. Change it to parental coverage to remove that penalty.'
     } else if (outcome === 'trade') {
       explanation = `${name(takerId!)} ${rotation.kind === 'chore' ? 'handled the chore' : 'took the seat'}${assigneeId ? ' instead of ' + name(assigneeId) : ''} and gets credit for it.`
       if (assigneeId && !absentIds.includes(assigneeId)) explanation += ` ${name(assigneeId)} is still due a turn.`

@@ -19,7 +19,7 @@ export function RequestPasswordReset({ client, initialEmail, onBack }: { client:
   }, [cooldown])
   return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12">
     <h1 className="text-3xl font-semibold">Reset your password</h1>
-    <p className="mt-3 text-stone-600">Enter the email for your adult account. Viewer devices can be paired again by a parent.</p>
+    <p className="mt-3 text-stone-600">Enter the email for your parental account. Viewer devices can be paired again by a parent.</p>
     <form className="mt-6 space-y-4" onSubmit={async event => {
       event.preventDefault()
       if (busy || cooldown) return
@@ -35,7 +35,7 @@ export function RequestPasswordReset({ client, initialEmail, onBack }: { client:
       } finally { setBusy(false) }
     }}>
       <label className="block">Email<input className={inputClass} type="email" autoComplete="username" required value={email} disabled={busy} onChange={event => setEmail(event.target.value)} /></label>
-      {sent ? <p role="status">If this address has an adult account, you’ll receive a reset link. Check your inbox and spam folder. If nothing arrives, contact the pilot owner.</p> : null}
+      {sent ? <p role="status">If this address has a parental account, you’ll receive a reset link. Check your inbox and spam folder. If nothing arrives, contact the pilot owner.</p> : null}
       {error ? <p role="alert" className="text-red-700">{error}</p> : null}
       <button className={buttonClass} disabled={busy || cooldown}>{busy ? 'Requesting…' : cooldown ? 'Wait a minute before retrying' : 'Send reset link'}</button>
     </form>

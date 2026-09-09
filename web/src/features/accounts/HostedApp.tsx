@@ -11,9 +11,9 @@ import { DeviceManager } from './DeviceManager'
 import { deviceCommand } from './deviceApi'
 import type { Person } from '../../domain/rotation/types'
 import { RequestPasswordReset } from './PasswordRecovery'
-import { AdultLinking } from './AdultLinking'
-import { AdultAccessManager } from './AdultAccessManager'
-import { adultCommand } from './adultApi'
+import { ParentalLinking } from './ParentalLinking'
+import { ParentalAccessManager } from './ParentalAccessManager'
+import { parentalCommand } from './parentalApi'
 
 const buttonClass = 'rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white disabled:opacity-50'
 const inputClass = 'mt-1 block w-full rounded-xl border border-stone-300 bg-white p-3'
@@ -53,7 +53,7 @@ export function HostedApp({ client, recoveryEnabled = false }: { client: Supabas
   if (pairing) return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12"><h1 className="text-3xl font-semibold">TurnTally</h1><ViewerPairing client={client} onBack={() => setPairing(false)} /></main></PageShell>
   return <PageShell><main className="mx-auto w-full max-w-md px-5 py-12">
     <h1 className="text-3xl font-semibold">Sign in to TurnTally</h1>
-    <p className="mt-3 text-stone-600">Use the adult account set up for your family. This pilot has no public signup.</p>
+    <p className="mt-3 text-stone-600">Use the parental account set up for your family. This pilot has no public signup.</p>
     <form className="mt-6 space-y-4" onSubmit={async (event) => {
       event.preventDefault(); setBusy(true); setError(null)
       try {
@@ -81,7 +81,7 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
   const [generation, setGeneration] = useState(0)
   const [online, setOnline] = useState(navigator.onLine)
   const [devicesOpen, setDevicesOpen] = useState(false)
-  const [adultsOpen, setAdultsOpen] = useState(false)
+  const [parentalAccessOpen, setParentalAccessOpen] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
   const [linkState, setLinkState] = useState<string | null>(null)
   const [people, setPeople] = useState<readonly Person[]>([])
@@ -104,7 +104,7 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
     let active = true
     setLinkState(null)
     if (status === 'error' && accessDenied && !viewerDevice) {
-      void adultCommand<{ state: string }>(client,'eligibility').then(next => { if (active) { setLinkState(next.state); if (next.state === 'eligible') setError(null) } }).catch(() => { /* Remain on the access error; network errors never imply eligibility. */ })
+      void parentalCommand<{ state: string }>(client,'eligibility').then(next => { if (active) { setLinkState(next.state); if (next.state === 'eligible') setError(null) } }).catch(() => { /* Remain on the access error; network errors never imply eligibility. */ })
     }
     return () => { active = false }
   }, [client,status,accessDenied,viewerDevice,generation])
@@ -123,7 +123,7 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
       try { await repository.checkAccess() }
       catch (error) {
         if (active) {
-          repository.forget(); setPeople([]); setDevicesOpen(false); setAdultsOpen(false); setAccessDenied(error instanceof FamilyAccessError); setStatus('error')
+          repository.forget(); setPeople([]); setDevicesOpen(false); setParentalAccessOpen(false); setAccessDenied(error instanceof FamilyAccessError); setStatus('error')
           setError(error instanceof Error ? error.message : 'Reconnect to check family access.')
         }
       } finally { checking = false }
@@ -139,7 +139,7 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
     }
   }, [repository, viewerDevice, status])
   async function leaveViewer() {
-    if (!window.confirm('Disconnect this viewer device and open adult sign-in? You will need to pair it again to return to viewer mode.')) return
+    if (!window.confirm('Disconnect this viewer device and open parental sign-in? You will need to pair it again to return to viewer mode.')) return
     setDisconnecting(true); setError(null)
     try {
       await deviceCommand(client, 'disconnect')
@@ -150,14 +150,14 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
   }
   function refresh() {
     if (repository.conflict && !window.confirm('Refresh to the latest saved family? Download your attempted version first if you want to keep it.')) return
-    repository.conflict = null; setDevicesOpen(false); setAdultsOpen(false); setLinkState(null); setAccessDenied(false); setStatus('loading'); setError(null); setGeneration((value) => value + 1)
+    repository.conflict = null; setDevicesOpen(false); setParentalAccessOpen(false); setLinkState(null); setAccessDenied(false); setStatus('loading'); setError(null); setGeneration((value) => value + 1)
   }
   return <>
     <div className="border-b border-stone-200 bg-white px-5 py-3 text-sm">
       <div className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3">
         <p role="status">{viewerDevice && status === 'ready' && online ? 'Connected · View only · ' : ''}{online ? 'Shared family · refresh to see other devices’ changes' : 'Offline · reconnect to load or save changes'}</p>
         <button type="button" disabled={!online || status === 'loading'} onClick={refresh} className="font-semibold text-emerald-800 disabled:opacity-50">Refresh</button>
-        {viewerDevice ? <button type="button" disabled={!online || disconnecting} onClick={() => void leaveViewer()} className="font-semibold text-emerald-800 disabled:opacity-50">Sign in as an adult</button>
+        {viewerDevice ? <button type="button" disabled={!online || disconnecting} onClick={() => void leaveViewer()} className="font-semibold text-emerald-800 disabled:opacity-50">Parental sign-in</button>
           : <button type="button" onClick={() => void onSignOut().catch((error: Error) => setError(error.message))} className="font-semibold text-emerald-800">Sign out</button>}
       </div>
       {repository.conflict ? <div role="alert" className="mx-auto mt-3 max-w-xl text-red-700"><p>{repository.conflict.message}</p><button type="button" className="mt-2 underline" onClick={() => {
@@ -171,13 +171,13 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
     {status === 'loading' ? <PageShell><p className="m-8">Loading your family…</p></PageShell>
       : status === 'ready' ? devicesOpen && repository.identity.role === 'administrator'
         ? <PageShell><DeviceManager client={client} people={people} onBack={() => setDevicesOpen(false)} /></PageShell>
-        : adultsOpen && repository.identity.role === 'administrator'
-        ? <PageShell><AdultAccessManager client={client} onBack={() => setAdultsOpen(false)} /></PageShell>
+        : parentalAccessOpen && repository.identity.role === 'administrator'
+        ? <PageShell><ParentalAccessManager client={client} onBack={() => setParentalAccessOpen(false)} /></PageShell>
         : <App key={generation} repository={repository} onManageDevices={() => {
           void repository.readSnapshot().then(snapshot => { setPeople(snapshot.configuration?.people ?? []); setDevicesOpen(true) })
-        }} onManageAdults={() => setAdultsOpen(true)} />
+        }} onManageParentalAccess={() => setParentalAccessOpen(true)} />
       : status === 'migration' ? <Migration repository={repository} onComplete={refresh} />
-      : linkState === 'eligible' ? <PageShell><AdultLinking client={client} onLinked={refresh} /></PageShell>
+      : linkState === 'eligible' ? <PageShell><ParentalLinking client={client} onLinked={refresh} /></PageShell>
       : linkState === 'signin_required' ? <PageShell><p className="m-8">Sign out and sign in again before asking a parent to restore your access.</p></PageShell>
       : <PageShell><p className="m-8">Family access could not be loaded. Check your connection or ask the family owner to link your account, then refresh.</p></PageShell>}
   </>

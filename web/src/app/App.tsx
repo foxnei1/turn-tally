@@ -24,14 +24,14 @@ interface AppProps {
   repository?: TurnTallyRepository
   today?: CalendarDate
   onManageDevices?: () => void
-  onManageAdults?: () => void
+  onManageParentalAccess?: () => void
 }
 
 function localToday(): CalendarDate {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
-function App({ repository: suppliedRepository, today = localToday(), onManageDevices, onManageAdults }: AppProps) {
+function App({ repository: suppliedRepository, today = localToday(), onManageDevices, onManageParentalAccess }: AppProps) {
   const repository = useMemo<TurnTallyRepository>(
     () => suppliedRepository ?? new LocalStorageRotationRepository(window.localStorage),
     [suppliedRepository],
@@ -140,7 +140,7 @@ function App({ repository: suppliedRepository, today = localToday(), onManageDev
           {actionError ? <p role="alert" className="mt-2 text-sm text-red-700">{actionError}</p> : null}
         </div>
         {familyOpen && app.canAdminister && onManageDevices ? <button className="mb-5 rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white" onClick={onManageDevices}>Devices</button> : null}
-        {familyOpen && app.canAdminister && onManageAdults ? <button className="mb-5 ml-3 rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white" onClick={onManageAdults}>Adult access</button> : null}
+        {familyOpen && app.canAdminister && onManageParentalAccess ? <button className="mb-5 ml-3 rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white" onClick={onManageParentalAccess}>Parental access</button> : null}
         {backupsOpen && app.canEdit ? backups : absencesOpen ? <AbsencesScreen key={displayIdentity.id} configuration={app.configuration} today={today} canEdit={app.canEdit} onChange={app.changeAbsence} onBack={() => { setAbsencesOpen(false); setSelectedId(null) }} /> : familyOpen ? <FamilyScreen key={displayIdentity.id} people={people} activities={app.activities} canAdminister={app.canAdminister} onSave={app.saveMember} /> : editing && app.canEdit && !archived ? (
           <ActivityForm
             key={editing === 'edit' ? selectedId : 'new'}

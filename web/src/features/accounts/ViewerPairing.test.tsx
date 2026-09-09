@@ -47,7 +47,7 @@ describe('viewer pairing screen', () => {
     expect(f.invoke).toHaveBeenLastCalledWith('viewer-devices', expect.objectContaining({ body: { action:'activate', id, proof:'a'.repeat(64) } }))
     expect(f.setSession).toHaveBeenCalledWith(session)
   })
-  it('expires pending codes and cancels before returning to adult sign-in', async () => {
+  it('expires pending codes and cancels before returning to parental sign-in', async () => {
     const f = fixture(); render(<ViewerPairing client={f.client} onBack={f.onBack} />)
     await act(async () => fireEvent.click(screen.getByRole('button', { name:'Get a pairing code' })))
     await act(async () => fireEvent.click(screen.getByRole('button', { name:'Cancel pairing' })))

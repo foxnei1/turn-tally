@@ -2,11 +2,15 @@
 
 Cloudflare was selected on September 7, 2026 for pilot hosting on the free tier. The initial hosted app was deployed the same day, using the live Supabase backend. Owner sign-in, backup import, and manual sync across browser sessions are working. Personal/shared viewer enrollment is now deployed and verified; recovery, offline viewing, and remaining synchronization work are still in progress.
 
-## Adult access release — September 8, 2026 Central (September 9 UTC)
+## Parental terminology update — September 8, 2026 Central
 
-Version `aa50266b-7474-4b7f-b442-bed568182e9f` adds **Family → Adult access**, adult linking codes, parent approval, and login revocation. It includes the startup hotfix below. Supabase migration `20260909012704_adult_access.sql` and viewer Edge Function version 2 were deployed first. Initial adult Auth account creation remains operator-managed, public/anonymous signup remain disabled, and recovery is gated off while email setup is deferred.
+Current version `82bc84ee-38c5-4bb7-bf9a-bf28988d4994` uses **Parental access**, **Parental sign-in**, and **Parental coverage** throughout the app, including accessibility labels, recovery copy, and history explanations. **Adult Child** remains the editor role terminology. Components and documentation use the new names; existing database and backup identifiers remain compatible. All 200 web tests, lint, types, and build passed before deployment. No backend or family-data changes were needed.
 
-Deployment passed all 200 web tests, lint, types, and build. The published HTML, JavaScript, and CSS exactly match the tested build; SPA navigation fallback, Auth origin access, and unauthenticated household rejection pass. The updated viewer service passed temporary pairing start/poll/cancel and authentication checks. Owner database load/access checks retain administrator permissions and the account list succeeds; family revision and snapshot remain unchanged. The existing bundle-size warning remains. Full native Auth CI passed before deployment; linking another real adult through the hosted interface remains an owner-assisted acceptance step. See [adult access](adult-access.md).
+## Parental access release — September 8, 2026 Central (September 9 UTC)
+
+Version `aa50266b-7474-4b7f-b442-bed568182e9f` adds **Family → Parental access**, parental linking codes, parent approval, and login revocation. It includes the startup hotfix below. Supabase migration `20260909012704_adult_access.sql` and viewer Edge Function version 2 were deployed first. Initial parental Auth account creation remains operator-managed, public/anonymous signup remain disabled, and recovery is gated off while email setup is deferred.
+
+Deployment passed all 200 web tests, lint, types, and build. The published HTML, JavaScript, and CSS exactly match the tested build; SPA navigation fallback, Auth origin access, and unauthenticated household rejection pass. The updated viewer service passed temporary pairing start/poll/cancel and authentication checks. Owner database load/access checks retain administrator permissions and the account list succeeds; family revision and snapshot remain unchanged. The existing bundle-size warning remains. Full native Auth CI passed before deployment; linking another parental account holder through the hosted interface remains an owner-assisted acceptance step. See [parental access](parental-access.md).
 
 ## Startup hotfix — September 8, 2026 UTC
 
@@ -18,7 +22,7 @@ The release was built from viewer checkpoint `d5c54fa` in the isolated `turntall
 
 Version `c5c94c7f-ce11-4bfb-a9c3-5f6a40159c58` serves the viewer-enabled app. Deployment passed lint, TypeScript, all 172 web tests, the production build, and the hosted configuration guard. Published JavaScript/CSS exactly match the tested build, and SPA navigation fallback passes. The existing bundle-size warning remains.
 
-Supabase's viewer migrations and Edge Function version 1 were deployed first. The owner approved a personal and a shared viewer in two isolated browser sessions. Session persistence, server write rejection, revocation, and disconnect-before-adult-sign-in passed; both test devices are now revoked. The family snapshot and revision were unchanged. See the [viewer release record](viewer-enrollment-release.md) for exact checks and remaining physical-device validation.
+Supabase's viewer migrations and Edge Function version 1 were deployed first. The owner approved a personal and a shared viewer in two isolated browser sessions. Session persistence, server write rejection, revocation, and disconnect-before-parental-sign-in passed; both test devices are now revoked. The family snapshot and revision were unchanged. See the [viewer release record](viewer-enrollment-release.md) for exact checks and remaining physical-device validation.
 
 ## Hosting configuration
 
@@ -48,7 +52,7 @@ The client is publicly reachable, with family data protected by Supabase sign-in
 
 Cloudflare hosting and Supabase Auth/PostgreSQL are deployed. Supabase project: `https://trvzxycxwnuodicdkfjp.supabase.co`. The hosted client connects to the existing shared household; see [Supabase backend](supabase-backend.md) for setup and remaining work. The complete milestone must provide:
 
-- Separate authenticated adult accounts and administrator-provisioned, revocable viewer devices without child email addresses.
+- Separate authenticated parental accounts and administrator-provisioned, revocable viewer devices without child email addresses.
 - Admission limited to the owner's family, with no public signup.
 - Server-enforced administrator, editor, and viewer roles and household isolation.
 - An explicit preview and confirmation when migrating an existing browser's family data.

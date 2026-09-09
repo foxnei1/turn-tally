@@ -26,7 +26,7 @@ export async function openRecoverySession(client: SupabaseClient, tokens: Recove
   const verified = await client.auth.getUser()
   if (verified.error || !verified.data.user || verified.data.user.app_metadata?.turntally_viewer === true) {
     await client.auth.signOut({ scope: 'local' })
-    throw new Error('Adult recovery session required')
+    throw new Error('Parental recovery session required')
   }
   const expires = (result.data.session.expires_at ?? 0) * 1000
   if (expires <= Date.now()) throw new Error('Recovery session expired')
