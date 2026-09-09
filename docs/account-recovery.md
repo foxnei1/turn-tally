@@ -1,6 +1,12 @@
 # Adult account recovery
 
+**Deferred September 8, 2026 at the owner's request:** pause email/domain setup and recovery deployment while continuing the feature roadmap. The implemented recovery flow and tests remain available for a later release.
+
+The adult-access release adds `VITE_TURNTALLY_RECOVERY_ENABLED`, defaulting to false. It hides the request entry point and stops recovery callbacks before creating an Auth client, while still removing credentials from the URL. Set it to true only when preparing the configured recovery release and its live-email acceptance.
+
 Implemented September 8, 2026 UTC. **Not deployed:** the owner confirmed there is no sending domain or custom SMTP service yet. The live pilot remains on the verified viewer release. No live recovery email, password change, Auth configuration change, or household mutation was performed for this implementation.
+
+Follow-up [free-service research](free-email-research.md) identified personal Gmail SMTP as a possible no-domain pilot alternative. A purchased domain is required for the proposed Resend route, not inherently for Supabase SMTP. Sender selection and live delivery verification remain pending.
 
 ## Flow
 
@@ -16,7 +22,7 @@ Recovery uses an independent, memory-only Auth client. It neither overwrites nor
 
 The owner has not selected a domain or email service. No purchase, subscription, DNS change, or SMTP credential is included in this commit.
 
-1. Choose a sending domain and an email provider that supports SMTP. Verify the domain using the provider's required DNS records. A sending subdomain can be used while the app remains at its existing `workers.dev` address.
+1. Choose an SMTP sender. For Resend or another domain-based service, choose a sending domain and verify the provider's required DNS records. For the personal Gmail pilot alternative, follow the account requirements in [free-service research](free-email-research.md). The app can remain at its existing `workers.dev` address.
 2. In Supabase **Authentication → Email → SMTP settings**, enable custom SMTP and enter the provider's host, port, username, and password there. Set a verified sender address and a recognizable sender name such as **TurnTally**. Keep credentials out of this repository, chat, and all `VITE_*` variables. Disable provider link tracking for authentication emails.
 3. In [the project's Auth URL configuration](https://supabase.com/dashboard/project/trvzxycxwnuodicdkfjp/auth/url-configuration), set Site URL to `https://turntally-pilot.turntally-family.workers.dev` and allow this exact redirect:
 

@@ -8,13 +8,29 @@ import type { HouseholdSnapshot } from '../../data/RotationRepository'
 import { hostedFixture } from '../../test/hostedFixture'
 
 describe('hosted sign-in', () => {
+  it.each([true,false])('offers adult linking only when the server confirms missing access (denied=%s)', async denied => {
+    const auth = {
+      onAuthStateChange:vi.fn().mockReturnValue({ data:{ subscription:{ unsubscribe:vi.fn() } } }),
+      getSession:vi.fn().mockResolvedValue({ data:{ session:{ user:{ id:'adult' } } },error:null }),
+    }
+    const rpc = vi.fn(async (name: string) => name === 'turntally_adult_command'
+      ? { data:{ state:'eligible' },error:null }
+      : { data:null,error:{ code:denied ? '42501' : 'PGRST000',message:denied ? 'Access unavailable' : 'Network unavailable' } })
+    render(<HostedApp client={{ auth,rpc } as unknown as SupabaseClient} />)
+    if (denied) expect(await screen.findByRole('heading',{ name:'Link your adult account' })).toBeInTheDocument()
+    else {
+      expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable')
+      expect(rpc.mock.calls.every(([name]) => name === 'turntally_load')).toBe(true)
+      expect(screen.queryByRole('button',{ name:'Get a linking code' })).not.toBeInTheDocument()
+    }
+  })
   it('opens adult password recovery from sign-in without loading a family', async () => {
     const auth = {
       onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
       getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     }
     const rpc = vi.fn()
-    render(<HostedApp client={{ auth, rpc } as unknown as SupabaseClient} />)
+    render(<HostedApp client={{ auth, rpc } as unknown as SupabaseClient} recoveryEnabled />)
     await userEvent.type(await screen.findByLabelText('Email'), 'parent@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Forgot password?' }))
     expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument()
@@ -70,6 +86,7 @@ describe('hosted sign-in', () => {
     expect(auth.signInWithPassword).toHaveBeenCalledWith({ email: 'parent@example.com', password: 'example-password' })
     expect(auth.signUp).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Password')).toHaveValue('')
+    expect(screen.queryByRole('button',{ name:'Forgot password?' })).not.toBeInTheDocument()
   })
   it('does not expose local family setup to an authenticated but unprovisioned account', async () => {
     const client = {

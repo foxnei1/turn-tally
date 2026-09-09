@@ -15,7 +15,13 @@ export function supabaseDevicePorts(url: string, key: string, allowedOrigins: st
     },
     async user(token) {
       const { data, error } = await admin.auth.getUser(token)
-      return error ? null : data.user?.id ?? null
+      if (error || !data.user) return null
+      // getUser verified this exact token before any claim is used.
+      try {
+        const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+        if (typeof claims.session_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(claims.session_id)) return null
+        return { id: data.user.id, sessionId: claims.session_id }
+      } catch { return null }
     },
     async provision(id) {
       const email = `${id}@viewer.turntally.invalid`

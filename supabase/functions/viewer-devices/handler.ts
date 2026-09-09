@@ -3,7 +3,7 @@
 export type Json = Record<string, unknown>
 export interface DevicePorts {
   command(operation: string, actor: string | null, payload: Json): Promise<Json>
-  user(token: string): Promise<string | null>
+  user(token: string): Promise<{ id: string; sessionId: string } | null>
   provision(id: string): Promise<{ access_token: string; refresh_token: string }>
   removeUser(id: string): Promise<void>
   allowedOrigins: string[]
@@ -56,12 +56,16 @@ export function createDeviceHandler(ports: DevicePorts) {
       if (!body || Array.isArray(body) || typeof body !== 'object' || typeof body.action !== 'string' || !actions.has(body.action)) return reply({ error: 'Unknown action.' }, 400)
       const action = body.action
       let actor: string | null = null
+      let actorSession: string | null = null
       if (!publicActions.has(action)) {
         const token = request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1]
-        actor = token ? await ports.user(token) : null
+        const identity = token ? await ports.user(token) : null
+        actor = identity?.id ?? null
+        actorSession = identity?.sessionId ?? null
         if (!actor) return reply({ error: 'Sign in again to continue.' }, 401)
       }
       const payload: Json = {}
+      if (actorSession) payload.actor_session_id = actorSession
       if (['lookup','approve','deny'].includes(action)) {
         const code = typeof body.code === 'string' ? body.code.toUpperCase().replace(/[\s-]/g, '') : ''
         // Invalid-looking guesses still reach the shared account quota.

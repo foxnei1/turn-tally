@@ -13,6 +13,7 @@ export interface HostedHousehold {
   role: FamilyRole | null
   device?: import('../features/accounts/deviceApi').ViewerDeviceIdentity
 }
+export class FamilyAccessError extends Error {}
 
 export class SyncConflictError extends Error {
   readonly proposed: HouseholdSnapshot
@@ -47,10 +48,15 @@ export class SupabaseRotationRepository implements TurnTallyRepository {
         this.client.rpc('turntally_access'),
         new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Access check timed out. Reconnect and refresh to continue.')), 15000) }),
       ])
-      if (error || !data || data.household_id !== this.state?.household_id || data.role !== this.state?.role) {
+      if (error || !data || data.household_id !== this.state?.household_id || data.person_id !== this.state?.person_id || !['administrator','editor','viewer'].includes(data.role)) {
+        if (error?.code === '42501') throw new FamilyAccessError(error.message)
         throw new Error(error?.message ?? 'Family access changed. Reconnect to continue.')
       }
       // Deliberately preserve the current snapshot/revision for open forms.
+      if (this.state && data.role !== this.state.role) {
+        this.state = { ...this.state, role:data.role }
+        this.notify()
+      }
     } catch (error) { this.forget(); throw error }
     finally { clearTimeout(timer) }
   }
@@ -61,7 +67,7 @@ export class SupabaseRotationRepository implements TurnTallyRepository {
     if (error) {
       // Fail closed on lost/revoked access; never fall back to another family.
       this.state = null
-      throw new Error(error.message)
+      throw error.code === '42501' ? new FamilyAccessError(error.message) : new Error(error.message)
     }
     const next = data as HostedHousehold
     if (!next || !Number.isInteger(next.revision) || !next.household_id) throw new Error('Invalid family response.')

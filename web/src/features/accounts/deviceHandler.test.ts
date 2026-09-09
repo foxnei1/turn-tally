@@ -8,7 +8,7 @@ function fixture() {
   const ports: DevicePorts = {
     allowedOrigins: ['https://family.example'],
     command: vi.fn(async (operation) => operation === 'cleanup' ? { users: [] } : { state: 'pending', id }),
-    user: vi.fn(async () => id),
+    user: vi.fn(async () => ({ id, sessionId: id })),
     provision: vi.fn(async () => ({ access_token: 'viewer-access', refresh_token: 'viewer-refresh' })),
     removeUser: vi.fn(async () => {}),
   }
@@ -36,7 +36,7 @@ describe('viewer Edge coordinator', () => {
     expect(ports.command).not.toHaveBeenCalled()
     await call({ action: 'approve', code:'abcd-efgh', name:'Tablet', kind:'shared', actor_id:'attacker', household_id:'other', role:'administrator', person_id:'parent' }, 'parent-token')
     expect(ports.user).toHaveBeenCalledWith('parent-token')
-    expect(ports.command).toHaveBeenCalledWith('approve', id, { code_hash: await digest('ABCDEFGH'), name:'Tablet', kind:'shared', person_id:null })
+    expect(ports.command).toHaveBeenCalledWith('approve', id, { actor_session_id:id, code_hash: await digest('ABCDEFGH'), name:'Tablet', kind:'shared', person_id:null })
   })
   it('issues only a viewer session after the lease and successful SQL confirmation', async () => {
     const { ports, call } = fixture()

@@ -15,13 +15,24 @@ const ids = {
   otherFamily: '00000000-0000-0000-0000-000000000011',
 }
 let db: PGlite
-async function signIn(user = ids.owner, role = 'authenticated') {
+async function signIn(user = ids.owner, role = 'authenticated', session = user) {
   await db.exec('reset role')
   await db.query("select set_config('request.jwt.claim.sub', $1, false)", [user])
+  await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify({ sub:user, session_id:session || null })])
   await db.exec(`set role ${role}`)
 }
 async function save(snapshot = hostedFixture(), revision = 0, operation = 'edit', administratorId: string | null = null) {
   return db.query('select public.turntally_save($1, $2::jsonb, $3, $4) result', [revision, JSON.stringify(snapshot), operation, administratorId])
+}
+async function adult(operation: string, payload: Record<string, unknown> = {}) {
+  const result = await db.query<{ result: { state?: string; id: string; code: string | number; error?: string; accounts: { user_id: string }[]; email?: string } }>('select public.turntally_adult_command($1,$2::jsonb) result', [operation, JSON.stringify(payload)])
+  return result.rows[0].result
+}
+async function unlinkedAdult() {
+  await db.exec('reset role')
+  await db.query('delete from public.turntally_memberships where user_id = $1', [ids.editor])
+  await signIn(ids.editor)
+  return adult('start')
 }
 type CommandResult = { state?: string; id: string; user_id: string; error?: string; code?: number; devices: { id: string; revoked_at: string | null }[]; users: string[] }
 async function command(operation: string, payload: Record<string, unknown> = {}, actor: string | null = ids.owner) {
@@ -50,7 +61,10 @@ describe('Supabase database authorization and concurrency', () => {
     db = new PGlite()
     await db.exec(`
       create role anon; create role authenticated; create role service_role bypassrls;
-      create schema auth; create table auth.users (id uuid primary key);
+      create schema auth; create table auth.users (id uuid primary key, email text, raw_app_meta_data jsonb default '{}');
+      create table auth.sessions (id uuid primary key, user_id uuid references auth.users(id), created_at timestamptz default clock_timestamp());
+      create function auth.jwt() returns jsonb language sql stable as
+        $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''),'{}')::jsonb $$;
       create function auth.uid() returns uuid language sql stable as
         $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
       grant usage on schema auth to authenticated, anon;
@@ -60,11 +74,15 @@ describe('Supabase database authorization and concurrency', () => {
     `)
     const migrations = new URL('../../../supabase/migrations/', import.meta.url)
     for (const name of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) await db.exec(readFileSync(new URL(name, migrations), 'utf8'))
-    for (const id of [ids.owner, ids.editor, ids.viewer, ids.outsider]) await db.query('insert into auth.users values ($1)', [id])
+    for (const id of [ids.owner, ids.editor, ids.viewer, ids.outsider]) {
+      await db.query('insert into auth.users(id,email) values ($1,$2)', [id, id + '@example.com'])
+      await db.query('insert into auth.sessions(id,user_id) values ($1,$1)', [id])
+    }
   }, 30000)
   afterAll(async () => { await db?.close() })
   beforeEach(async () => {
-    await db.exec('reset role; delete from turntally_private.viewer_devices; delete from turntally_private.pairing_requests; delete from turntally_private.pairing_limits; delete from public.turntally_memberships; delete from public.turntally_households;')
+    await db.exec('reset role; delete from turntally_private.adult_requests; delete from turntally_private.viewer_devices; delete from turntally_private.pairing_requests; delete from turntally_private.pairing_limits; delete from public.turntally_memberships; delete from public.turntally_households;')
+    await db.exec("update auth.sessions set created_at = now() - interval '1 day'")
     await db.query('insert into public.turntally_households (id, owner_user_id, snapshot) values ($1, $2, $3::jsonb), ($4, $5, $3::jsonb)', [ids.family, ids.owner, JSON.stringify(hostedFixture()), ids.otherFamily, ids.outsider])
     for (const [user, person, family] of [[ids.owner, 'parent', ids.family], [ids.editor, 'adult', ids.family], [ids.viewer, 'child', ids.family], [ids.outsider, 'parent', ids.otherFamily]]) {
       await db.query('insert into public.turntally_memberships (user_id, household_id, person_id) values ($1, $2, $3)', [user, family, person])
@@ -78,6 +96,116 @@ describe('Supabase database authorization and concurrency', () => {
     expect(result.rows[0].result.household_id).toBe(ids.otherFamily)
     await expect(db.query('select * from public.turntally_households')).rejects.toThrow(/permission denied/)
     await expect(db.query('update public.turntally_memberships set person_id = $1', ['parent'])).rejects.toThrow(/permission denied/)
+  })
+  it('links an authenticated adult without changing the household snapshot or revision', async () => {
+    const request = await unlinkedAdult()
+    expect(request.code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+    expect((await adult('eligibility')).state).toBe('eligible')
+    await expect(db.query('select public.turntally_load()')).rejects.toThrow(/access is not available/)
+    await expect(adult('list')).rejects.toMatchObject({ code:'42501' })
+    await signIn()
+    expect((await adult('lookup', { code:request.code })).email).toBe(ids.editor + '@example.com')
+    expect((await adult('approve', { code:request.code, person_id:'adult', role:'administrator', household_id:ids.otherFamily })).state).toBe('approved')
+    expect((await adult('approve', { code:request.code, person_id:'adult' })).state).toBe('approved')
+    await signIn(ids.editor)
+    expect((await adult('status', { id:request.id })).state).toBe('approved')
+    const loaded = await db.query<{ result: { role: string; revision: number; snapshot: unknown } }>('select public.turntally_load() result')
+    expect(loaded.rows[0].result).toMatchObject({ role:'editor', revision:0, snapshot:hostedFixture() })
+    await expect(adult('list')).rejects.toMatchObject({ code:'42501' })
+    await expect(save()).resolves.toBeDefined()
+  })
+  it('keeps old sessions denied after revocation and reapproval, including viewer administration', async () => {
+    const request = await unlinkedAdult()
+    await signIn()
+    await adult('approve', { code:request.code, person_id:'adult' })
+    expect((await adult('revoke', { user_id:ids.editor })).state).toBe('revoked')
+    expect((await adult('approve', { code:request.code, person_id:'adult' })).code).toBe(410)
+    await signIn(ids.editor)
+    expect((await adult('eligibility')).state).toBe('signin_required')
+    await expect(adult('start')).rejects.toMatchObject({ code:'42501' })
+    await expect(db.query('select public.turntally_load()')).rejects.toMatchObject({ code:'42501' })
+    await db.exec('reset role')
+    const fresh = '00000000-0000-0000-0000-000000000888'
+    await db.query("insert into auth.sessions(id,user_id,created_at) values ($1,$2,clock_timestamp() + interval '1 second') on conflict(id) do update set created_at = excluded.created_at", [fresh,ids.editor])
+    await signIn(ids.editor,'authenticated',fresh)
+    const replacement = await adult('start')
+    await signIn()
+    // Reapprove as another parent to exercise every privileged entry point.
+    await adult('approve', { code:replacement.code, person_id:'parent', confirm_additional:true })
+    await signIn(ids.editor)
+    for (const rpc of ['turntally_load','turntally_access']) await expect(db.query(`select public.${rpc}()`)).rejects.toMatchObject({ code:'42501' })
+    await expect(save()).rejects.toMatchObject({ code:'42501' })
+    await expect(adult('list')).rejects.toMatchObject({ code:'42501' })
+    await expect(command('list', { actor_session_id:ids.editor },ids.editor)).rejects.toMatchObject({ code:'42501' })
+    await signIn(ids.editor,'authenticated',fresh)
+    expect((await adult('list')).accounts).toHaveLength(3)
+    await expect(db.query('select public.turntally_load()')).resolves.toBeDefined()
+    expect((await command('list', { actor_session_id:fresh },ids.editor)).devices).toEqual([])
+  })
+  it('rejects cross-household remapping, viewer profiles, and unconfirmed additional logins', async () => {
+    await signIn(ids.editor)
+    expect((await adult('start')).code).toBe(409)
+    const request = await unlinkedAdult()
+    await signIn()
+    expect((await adult('approve', { code:request.code, person_id:'child' })).code).toBe(400)
+    expect((await adult('approve', { code:request.code, person_id:'parent' })).code).toBe(409)
+    expect((await adult('approve', { code:request.code, person_id:'adult' })).state).toBe('approved')
+    await signIn(ids.outsider)
+    expect((await adult('approve', { code:request.code, person_id:'parent', confirm_additional:true })).code).toBe(410)
+    await signIn()
+    await adult('revoke', { user_id:ids.editor })
+    await db.exec('reset role')
+    await db.query("update auth.sessions set created_at = clock_timestamp() + interval '1 second' where id = $1", [ids.editor])
+    await signIn(ids.editor)
+    const retry = await adult('start')
+    await signIn(ids.outsider)
+    expect((await adult('lookup', { code:retry.code })).code).toBe(410)
+  })
+  it('binds status and cancellation to the requester session and expires or cancels codes', async () => {
+    const request = await unlinkedAdult()
+    await signIn(ids.outsider)
+    expect((await adult('status', { id:request.id })).code).toBe(410)
+    await signIn(ids.editor)
+    expect((await adult('cancel', { id:request.id })).state).toBe('canceled')
+    await signIn()
+    expect((await adult('approve', { code:request.code, person_id:'adult' })).code).toBe(410)
+    await signIn(ids.editor)
+    const expired = await adult('start')
+    await db.exec('reset role')
+    await db.query("update turntally_private.adult_requests set expires_at = now() - interval '1 second' where id = $1", [expired.id])
+    await signIn()
+    expect((await adult('lookup', { code:expired.code })).code).toBe(410)
+    await signIn(ids.editor)
+    expect((await adult('status', { id:expired.id })).state).toBe('expired')
+  })
+  it('revokes deactivated adult memberships without reviving them on roster reactivation', async () => {
+    const inactive = hostedFixture(); inactive.configuration!.people[1].active = false
+    await save(inactive)
+    await signIn(ids.editor)
+    await expect(db.query('select public.turntally_load()')).rejects.toMatchObject({ code:'42501' })
+    await signIn()
+    await save(hostedFixture(),1)
+    await signIn(ids.editor)
+    expect((await adult('eligibility')).state).toBe('signin_required')
+    await expect(db.query('select public.turntally_load()')).rejects.toMatchObject({ code:'42501' })
+  })
+  it('protects the owner and current login, and commits rate limits on failed guesses', async () => {
+    expect((await adult('revoke', { user_id:ids.owner })).code).toBe(409)
+    for (let i = 0; i < 10; i++) expect((await adult('lookup', { code:'BAD-CODE' })).code).toBe(410)
+    expect((await adult('lookup', { code:'BAD-CODE' })).code).toBe(429)
+    await expect(db.query('select * from turntally_private.adult_requests')).rejects.toThrow(/permission denied/)
+  })
+  it('rejects mismatched sessions and viewer identities before issuing adult codes', async () => {
+    await signIn(ids.editor,'authenticated',ids.owner)
+    await expect(adult('start')).rejects.toMatchObject({ code:'42501' })
+    await db.exec('reset role')
+    await db.query("update auth.users set raw_app_meta_data = '{\"turntally_viewer\":true}' where id = $1",[ids.editor])
+    await signIn(ids.editor)
+    await expect(adult('start')).rejects.toMatchObject({ code:'42501' })
+    await db.exec('reset role')
+    await db.query("update auth.users set raw_app_meta_data = '{}' where id = $1",[ids.editor])
+    await signIn('', 'anon')
+    await expect(adult('start')).rejects.toThrow(/permission denied/)
   })
   it('restricts the hosted RLS event helper without removing operator access', async () => {
     const result = await db.query<{ anon: boolean; authenticated: boolean; service: boolean }>(`select

@@ -8,7 +8,19 @@ const { createClient, auth, rpc } = vi.hoisted(() => ({
 vi.mock('@supabase/supabase-js', () => ({ createClient }))
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); vi.clearAllMocks(); localStorage.clear(); window.history.replaceState(null, '', '/') })
 
+it('keeps deferred recovery links isolated without creating an Auth client', async () => {
+  vi.stubEnv('VITE_TURNTALLY_MODE','hosted')
+  vi.stubEnv('VITE_TURNTALLY_RECOVERY_ENABLED','false')
+  window.history.replaceState(null,'','/auth/recovery#type=recovery&access_token=test-access&refresh_token=test-refresh')
+  const { default: ConfiguredApp } = await import('./ConfiguredApp')
+  render(<ConfiguredApp />)
+  expect(screen.getByRole('heading',{ name:'Password recovery is not available yet' })).toBeInTheDocument()
+  expect(createClient).not.toHaveBeenCalled()
+  expect(window.location.hash).toBe('')
+}, 15000)
+
 it('boots recovery in isolation before the normal Auth client can consume the email link', async () => {
+  vi.stubEnv('VITE_TURNTALLY_RECOVERY_ENABLED', 'true')
   vi.stubEnv('VITE_TURNTALLY_MODE', 'hosted')
   vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co')
   vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', 'test-public-key')

@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { LocalStorageRotationRepository } from '../data/localStorageRepository'
+import { SupabaseRotationRepository } from '../data/supabaseRepository'
+import type { HouseholdSnapshot } from '../data/RotationRepository'
 import type { HouseholdConfiguration } from '../domain/rotation/types'
 import { useTurnTally } from './useTurnTally'
 
@@ -14,6 +17,31 @@ const draft = { name: 'Kitchen', cadence: 'daily' as const, roster: ['adult', 'c
 
 describe('application permissions', () => {
   beforeEach(() => localStorage.clear())
+
+  it('loads a new day from database-ordered JSON and records missing assignments once', async () => {
+    // PostgreSQL jsonb returns events before configuration, unlike the local
+    // object literal. Startup must compare the exact snapshot it actually read.
+    let shared: HouseholdSnapshot = { events: [], configuration: structuredClone(configuration) }
+    let revision = 5
+    const rpc = vi.fn(async (name: string, args?: { expected_revision: number; proposed_snapshot: HouseholdSnapshot }) => {
+      if (name === 'turntally_save') {
+        expect(args!.expected_revision).toBe(revision)
+        shared = { events: args!.proposed_snapshot.events, configuration: args!.proposed_snapshot.configuration }
+        return { data: { revision: ++revision }, error: null }
+      }
+      return { data: { household_id: 'family', snapshot: structuredClone(shared), revision, person_id: 'parent', role: 'administrator' }, error: null }
+    })
+    const repository = new SupabaseRotationRepository({ rpc } as unknown as SupabaseClient)
+    const { result } = renderHook(() => useTurnTally(repository, '2026-09-08'))
+    await waitFor(() => expect(result.current.phase).toBe('ready'))
+    expect(result.current.error).toBeNull()
+    expect(shared.events).toHaveLength(2)
+    expect(revision).toBe(6)
+    await act(() => result.current.reload())
+    expect(result.current.phase).toBe('ready')
+    expect(shared.events).toHaveLength(2)
+    expect(rpc.mock.calls.filter(([name]) => name === 'turntally_save')).toHaveLength(1)
+  })
 
   it('rejects every viewer mutation even when called without UI controls', async () => {
     const repository = new LocalStorageRotationRepository(localStorage)

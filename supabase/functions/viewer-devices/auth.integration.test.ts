@@ -2,6 +2,82 @@ import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import { createDeviceHandler, type Json } from './handler.ts'
 import { supabaseDevicePorts } from './supabasePorts.ts'
 
+Deno.test('isolated Auth: adult linking, concurrent admission and old-session denial after reapproval', async () => {
+  const url = Deno.env.get('TT_TEST_SUPABASE_URL') ?? ''
+  check(url === 'http://127.0.0.1:54321', 'Adult access tests forbid remote projects.')
+  const key = Deno.env.get('TT_TEST_SERVICE_ROLE_KEY') ?? ''
+  const anonKey = Deno.env.get('TT_TEST_ANON_KEY') ?? ''
+  check(key && anonKey, 'Local test keys are missing.')
+  const options = { auth:{ persistSession:false, autoRefreshToken:false, detectSessionInUrl:false } }
+  const admin = createClient(url,key,options)
+  const mailCount = async () => {
+    const response = await fetch('http://127.0.0.1:54324/api/v1/messages')
+    check(response.ok,'Mailpit is required for the no-email assertion.')
+    return (await response.json()).total
+  }
+  const beforeMail = await mailCount()
+  async function account() {
+    const email = `${crypto.randomUUID()}@adult.turntally.invalid`; const password = crypto.randomUUID() + 'Aa1!'
+    const created = await admin.auth.admin.createUser({ email,password,email_confirm:true })
+    check(!created.error && created.data.user,'Could not provision a disposable adult.')
+    const client = createClient(url,anonKey,options)
+    const login = await client.auth.signInWithPassword({ email,password })
+    check(!login.error && login.data.session,'Could not sign in the disposable adult.')
+    return { client,email,password,id:created.data.user.id,session:login.data.session }
+  }
+  const parent = await account(); const target = await account(); const outsider = await account(); const racer = await account()
+  const snapshot = { configuration:{ rolesInitialized:true,startDate:'2026-09-07',rotation:{},people:[
+    { id:'parent',name:'Parent',role:'administrator',active:true },{ id:'adult',name:'Adult',role:'editor',active:true },
+  ] },events:[] }
+  async function household(owner: typeof parent) {
+    const family = await admin.from('turntally_households').insert({ owner_user_id:owner.id,snapshot }).select('id').single()
+    check(!family.error && family.data,'Could not create the test household.')
+    check(!(await admin.from('turntally_memberships').insert({ user_id:owner.id,household_id:family.data.id,person_id:'parent' })).error,'Could not link its owner.')
+    return family.data.id
+  }
+  const family = await household(parent); await household(outsider)
+  async function command(client: typeof parent.client, operation: string, payload: Json = {}) {
+    const result = await client.rpc('turntally_adult_command',{ operation,payload })
+    check(!result.error,`Adult ${operation} RPC failed (${errorCode(result.error)}).`)
+    return result.data
+  }
+  const request = await command(target.client,'start')
+  check((await target.client.rpc('turntally_load')).error?.code === '42501','Unlinked adult could read family data.')
+  const approvals = await Promise.all([command(parent.client,'approve',{ code:request.code,person_id:'adult' }),command(parent.client,'approve',{ code:request.code,person_id:'adult' })])
+  check(approvals.every(result => result.state === 'approved'),'Identical concurrent approvals were not idempotent.')
+  const loaded = await target.client.rpc('turntally_load')
+  check(!loaded.error && loaded.data.role === 'editor' && loaded.data.household_id === family && loaded.data.revision === 0,'Adult approval changed role, household or revision unexpectedly.')
+  check((await target.client.rpc('turntally_adult_command',{ operation:'list' })).error?.code === '42501','Editor could manage access.')
+  check((await command(parent.client,'revoke',{ user_id:target.id })).state === 'revoked','Adult revoke failed.')
+  check((await command(target.client,'eligibility')).state === 'signin_required','Revoked session can request reapproval.')
+  check((await command(parent.client,'approve',{ code:request.code,person_id:'adult' })).code === 410,'Stale approval restored access.')
+  const fresh = createClient(url,anonKey,options)
+  const login = await fresh.auth.signInWithPassword({ email:target.email,password:target.password })
+  check(!login.error && login.data.session,'Fresh sign-in failed.')
+  const replacement = await command(fresh,'start')
+  check((await command(parent.client,'approve',{ code:replacement.code,person_id:'parent',confirm_additional:true })).state === 'approved','Fresh reapproval failed.')
+  const refreshed = await target.client.auth.refreshSession()
+  check(!refreshed.error && refreshed.data.session,'Old session refresh could not exercise cutoff protection.')
+  for (const name of ['turntally_load','turntally_access']) check((await target.client.rpc(name)).error?.code === '42501','Old refreshed session regained read access.')
+  check((await target.client.rpc('turntally_save',{ expected_revision:0,proposed_snapshot:snapshot })).error?.code === '42501','Old refreshed session regained writes.')
+  check((await target.client.rpc('turntally_adult_command',{ operation:'list' })).error?.code === '42501','Old refreshed session regained adult administration.')
+  const handler = createDeviceHandler(supabaseDevicePorts(url,key,['http://127.0.0.1:5173']))
+  async function devices(token: string) {
+    const response = await handler(new Request(url + '/functions/v1/viewer-devices',{ method:'POST',headers:{ 'Content-Type':'application/json',Authorization:`Bearer ${token}` },body:JSON.stringify({ action:'list',actor_session_id:login.data.session!.access_token }) }))
+    await response.body?.cancel()
+    return response.status
+  }
+  check(await devices(refreshed.data.session.access_token) === 403,'Forged body session restored old viewer administration.')
+  check(await devices(login.data.session.access_token) === 200,'Newly approved session cannot manage viewer devices.')
+  check(!(await fresh.rpc('turntally_load')).error,'Fresh reapproved session cannot load.')
+  const raceRequest = await command(racer.client,'start')
+  const raced = await Promise.all([command(parent.client,'approve',{ code:raceRequest.code,person_id:'adult' }),command(outsider.client,'approve',{ code:raceRequest.code,person_id:'adult' })])
+  check(raced.filter(result => result.state === 'approved').length === 1 && raced.filter(result => result.code === 410).length === 1,'Cross-household admission did not produce exactly one winner.')
+  const snapshotAfter = await admin.from('turntally_households').select('snapshot,revision').eq('id',family).single()
+  check(!snapshotAfter.error && snapshotAfter.data.revision === 0 && snapshotAfter.data.snapshot.events.length === 0,'Access operations changed family history.')
+  check(await mailCount() === beforeMail,'Adult linking unexpectedly sent email.')
+})
+
 // A real GoTrue/PostgREST check, intentionally restricted to the disposable
 // local stack. Assertions never dump Auth results or tokens into test output.
 function check(value: unknown, message: string): asserts value {

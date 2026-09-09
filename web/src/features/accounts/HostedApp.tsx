@@ -4,18 +4,21 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import App from '../../app/App'
 import { PageShell } from '../../components/PageShell'
 import { LocalStorageRotationRepository } from '../../data/localStorageRepository'
-import { SupabaseRotationRepository } from '../../data/supabaseRepository'
+import { FamilyAccessError, SupabaseRotationRepository } from '../../data/supabaseRepository'
 import { backupCounts, createBackup, MAX_BACKUP_BYTES, parseBackup, type Backup } from '../../domain/backups/backup'
 import { ViewerPairing } from './ViewerPairing'
 import { DeviceManager } from './DeviceManager'
 import { deviceCommand } from './deviceApi'
 import type { Person } from '../../domain/rotation/types'
 import { RequestPasswordReset } from './PasswordRecovery'
+import { AdultLinking } from './AdultLinking'
+import { AdultAccessManager } from './AdultAccessManager'
+import { adultCommand } from './adultApi'
 
 const buttonClass = 'rounded-xl bg-emerald-800 px-4 py-3 font-semibold text-white disabled:opacity-50'
 const inputClass = 'mt-1 block w-full rounded-xl border border-stone-300 bg-white p-3'
 
-export function HostedApp({ client }: { client: SupabaseClient }) {
+export function HostedApp({ client, recoveryEnabled = false }: { client: SupabaseClient; recoveryEnabled?: boolean }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
@@ -65,7 +68,7 @@ export function HostedApp({ client }: { client: SupabaseClient }) {
       {error ? <p role="alert" className="text-red-700">{error}</p> : null}
       <button className={buttonClass} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
-    <button type="button" disabled={busy} className="mt-6 block font-semibold text-emerald-800" onClick={() => { setPassword(''); setError(null); setRecovering(true) }}>Forgot password?</button>
+    {recoveryEnabled ? <button type="button" disabled={busy} className="mt-6 block font-semibold text-emerald-800" onClick={() => { setPassword(''); setError(null); setRecovering(true) }}>Forgot password?</button> : null}
     <button type="button" disabled={busy} className="mt-8 font-semibold text-emerald-800" onClick={() => { setPassword(''); setError(null); setPairing(true) }}>Use as a viewer</button>
   </main></PageShell>
 }
@@ -78,6 +81,9 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
   const [generation, setGeneration] = useState(0)
   const [online, setOnline] = useState(navigator.onLine)
   const [devicesOpen, setDevicesOpen] = useState(false)
+  const [adultsOpen, setAdultsOpen] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
+  const [linkState, setLinkState] = useState<string | null>(null)
   const [people, setPeople] = useState<readonly Person[]>([])
   const [disconnecting, setDisconnecting] = useState(false)
   // Remember device mode after revoked access clears the repository identity.
@@ -91,16 +97,24 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
         setPeople(snapshot.configuration?.people ?? [])
         if (repository.identity.device) setViewerDevice(true)
       }
-    }).catch((error: Error) => { if (active) { setError(error.message); setStatus('error') } })
+    }).catch((error: Error) => { if (active) { setError(error.message); setAccessDenied(error instanceof FamilyAccessError); setStatus('error') } })
     return () => { active = false }
   }, [repository, generation])
+  useEffect(() => {
+    let active = true
+    setLinkState(null)
+    if (status === 'error' && accessDenied && !viewerDevice) {
+      void adultCommand<{ state: string }>(client,'eligibility').then(next => { if (active) { setLinkState(next.state); if (next.state === 'eligible') setError(null) } }).catch(() => { /* Remain on the access error; network errors never imply eligibility. */ })
+    }
+    return () => { active = false }
+  }, [client,status,accessDenied,viewerDevice,generation])
   useEffect(() => {
     const update = () => setOnline(navigator.onLine)
     window.addEventListener('online', update); window.addEventListener('offline', update)
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) }
   }, [])
   useEffect(() => {
-    if (!viewerDevice || status !== 'ready') return
+    if (status !== 'ready') return
     let active = true
     let checking = false
     const check = async () => {
@@ -109,8 +123,8 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
       try { await repository.checkAccess() }
       catch (error) {
         if (active) {
-          repository.forget(); setPeople([]); setDevicesOpen(false); setStatus('error')
-          setError(error instanceof Error ? error.message : 'Reconnect to check viewer access.')
+          repository.forget(); setPeople([]); setDevicesOpen(false); setAdultsOpen(false); setAccessDenied(error instanceof FamilyAccessError); setStatus('error')
+          setError(error instanceof Error ? error.message : 'Reconnect to check family access.')
         }
       } finally { checking = false }
     }
@@ -136,7 +150,7 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
   }
   function refresh() {
     if (repository.conflict && !window.confirm('Refresh to the latest saved family? Download your attempted version first if you want to keep it.')) return
-    repository.conflict = null; setDevicesOpen(false); setStatus('loading'); setError(null); setGeneration((value) => value + 1)
+    repository.conflict = null; setDevicesOpen(false); setAdultsOpen(false); setLinkState(null); setAccessDenied(false); setStatus('loading'); setError(null); setGeneration((value) => value + 1)
   }
   return <>
     <div className="border-b border-stone-200 bg-white px-5 py-3 text-sm">
@@ -157,10 +171,14 @@ function FamilySession({ client, onSignOut, viewerHint }: { client: SupabaseClie
     {status === 'loading' ? <PageShell><p className="m-8">Loading your family…</p></PageShell>
       : status === 'ready' ? devicesOpen && repository.identity.role === 'administrator'
         ? <PageShell><DeviceManager client={client} people={people} onBack={() => setDevicesOpen(false)} /></PageShell>
+        : adultsOpen && repository.identity.role === 'administrator'
+        ? <PageShell><AdultAccessManager client={client} onBack={() => setAdultsOpen(false)} /></PageShell>
         : <App key={generation} repository={repository} onManageDevices={() => {
           void repository.readSnapshot().then(snapshot => { setPeople(snapshot.configuration?.people ?? []); setDevicesOpen(true) })
-        }} />
+        }} onManageAdults={() => setAdultsOpen(true)} />
       : status === 'migration' ? <Migration repository={repository} onComplete={refresh} />
+      : linkState === 'eligible' ? <PageShell><AdultLinking client={client} onLinked={refresh} /></PageShell>
+      : linkState === 'signin_required' ? <PageShell><p className="m-8">Sign out and sign in again before asking a parent to restore your access.</p></PageShell>
       : <PageShell><p className="m-8">Family access could not be loaded. Check your connection or ask the family owner to link your account, then refresh.</p></PageShell>}
   </>
 }

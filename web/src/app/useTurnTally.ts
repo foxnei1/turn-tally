@@ -61,18 +61,19 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
     try {
       await repository.refresh?.()
       if (repository.hosted) setActorId(repository.identity?.personId ?? null)
-      const configuration = await repository.loadConfiguration()
+      const snapshot = await repository.readSnapshot()
+      const { configuration } = snapshot
       if (!configuration) {
         setState({ ...EMPTY_STATE, phase: 'setup' })
         return
       }
 
-      let events = await repository.listEvents()
+      let events = snapshot.events
       const initialReplay = replayActivities(configuration, events, today)
       const missingAssignments = missingAssignmentEvents(initialReplay.flatMap((view) => view.records), events)
       if (repository.hosted) {
         if (missingAssignments.length && !repository.readOnly) {
-          await repository.replaceSnapshot({ configuration, events: [...events, ...missingAssignments] }, JSON.stringify({ configuration, events }))
+          await repository.replaceSnapshot({ configuration, events: [...events, ...missingAssignments] }, JSON.stringify(snapshot))
         }
       } else {
         for (const assignment of missingAssignments) await repository.appendEvent(assignment)
@@ -271,6 +272,6 @@ export function useTurnTally(repository: TurnTallyRepository, today: CalendarDat
     ...state, actor, createHousehold, recordOutcome, saveActivity, saveMember, setupAdministrator, selectProfile, reset, reload: load,
     setActivityArchived, exportBackup, previewBackup, importBackup, changeAbsence,
     canEdit: !repository.readOnly && state.configuration ? canEdit(state.configuration, actorId) : false,
-    canAdminister: !repository.readOnly && state.configuration ? canAdminister(state.configuration, actorId) : false,
+    canAdminister: !repository.readOnly && (!repository.hosted || repository.identity?.role === 'administrator') && state.configuration ? canAdminister(state.configuration, actorId) : false,
   }
 }

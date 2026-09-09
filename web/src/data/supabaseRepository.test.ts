@@ -11,6 +11,17 @@ function fixture() {
 }
 
 describe('Supabase repository', () => {
+  it('adopts a role reduction on access check without advancing an open snapshot', async () => {
+    const { repository, rpc, initial } = fixture()
+    await repository.refresh()
+    const before = await repository.readSnapshot()
+    rpc.mockResolvedValueOnce({ data:{ ...initial, role:'viewer', revision:99 },error:null })
+    await repository.checkAccess()
+    expect(repository.readOnly).toBe(true)
+    expect(repository.revision).toBe(5)
+    expect(await repository.readSnapshot()).toEqual(before)
+    await expect(repository.saveConfiguration(hostedFixture().configuration!)).rejects.toThrow(/view only/)
+  })
   it('uses a consistent snapshot until explicit refresh and saves with its revision', async () => {
     const { repository, rpc, initial } = fixture()
     await repository.refresh()
