@@ -1,6 +1,6 @@
 # Adult account access
 
-Implemented locally September 8, 2026 for the next part of milestone 4. Migration `20260908171832_adult_access.sql`, adult linking/management screens, and session validation in the viewer coordinator are ready for validation. Native Auth CI and deployment are pending. Email setup and password-recovery deployment remain deferred; `VITE_TURNTALLY_RECOVERY_ENABLED` defaults to false and also gates recovery callbacks before Auth client creation.
+Implemented and validated September 8, 2026 for the next part of milestone 4. Commit `0871c9c` includes migration `20260908171832_adult_access.sql`, adult linking/management screens, and session validation in the viewer coordinator. All three jobs passed in [CI run 34298601376](https://github.com/foxnei1/turn-tally/actions/runs/34298601376): 200 web tests with lint/types/build, Python checks (49 passed and one existing expected failure), and native Auth integration in disposable Supabase. Both staged secret scans were clean. Deployment is pending because the live Supabase MCP connection cannot refresh its OAuth login; three read-only checks failed before any remote changes. The owner was asked to reconnect the connector. Email setup and password-recovery deployment remain deferred; `VITE_TURNTALLY_RECOVERY_ENABLED` defaults to false and also gates recovery callbacks before Auth client creation.
 
 ## First delivery
 

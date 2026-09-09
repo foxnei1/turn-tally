@@ -1,5 +1,11 @@
 # Supabase backend
 
+## Adult access release handoff — September 8, 2026
+
+Commit `0871c9c` implements parent-managed adult linking and revocation. All three jobs passed in [CI run 34298601376](https://github.com/foxnei1/turn-tally/actions/runs/34298601376), including 200 web tests and real Auth sessions with concurrent approvals and old-session denial after reapproval. See [adult access](adult-access.md) for the flow and release order. Initial adult Auth account creation remains operator-managed.
+
+**Not deployed:** the live MCP connector failed three read-only calls because it could not refresh its OAuth login. Reconnect Supabase, inspect the current schema/advisors, apply `20260908171832_adult_access.sql`, deploy the updated `viewer-devices` Edge Function, then deploy the frontend with recovery disabled. No live account, household, schema, or Auth setting was changed for this feature. The pilot remains on the verified startup hotfix described in [Cloudflare hosting](cloudflare-pilot.md).
+
 Selected September 7, 2026 alongside Cloudflare hosting for the free-tier family pilot.
 
 Adult password recovery is now implemented but not deployed. The owner has no sending domain or custom SMTP service yet; see [account recovery](account-recovery.md) for the completed flow, tests, and required live configuration. The viewer deployment below remains the current live release.

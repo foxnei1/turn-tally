@@ -65,7 +65,7 @@ Adult password recovery is implemented with an isolated reset session and automa
 
 ## Decisions to settle next
 
-- [Adult account access](adult-access.md) is implemented locally: authenticated linking codes, parent approval, account revocation, and fresh-sign-in requirements for reapproval. Initial adult account creation remains operator-managed while email setup is deferred. Native Auth CI and deployment are next.
+- [Adult account access](adult-access.md) is implemented with passing web, Python, and native Auth CI: authenticated linking codes, parent approval, account revocation, and fresh-sign-in requirements for reapproval. Initial adult account creation remains operator-managed while email setup is deferred. Deployment awaits reconnection of the live Supabase MCP login.
 - For item 4: finish adult admission, offline behavior, synchronization, and remaining validation. Email setup and recovery deployment are deferred at the owner's request. Cloudflare hosting, Supabase backend, and viewer enrollment are deployed for the family pilot.
 - Before item 6: confirm store account ownership and access to iOS build/test infrastructure.
 
